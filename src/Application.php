@@ -12,6 +12,9 @@ use App\Paint\DocumentStore;
 use App\Paint\PaintService;
 use App\Security\AuthenticatedService;
 use App\Security\ServiceAuthenticator;
+use App\Security\ServiceIdentity;
+use App\Storage\StorageClient;
+use App\Storage\StorageClientException;
 use InvalidArgumentException;
 use Throwable;
 
@@ -54,6 +57,7 @@ final class Application
                 'mind_service_auth' => ((string) ($serviceAuth['mind.elonn'] ?? '')) !== '' ? 'configured' : 'missing',
                 'storage_service_config' => ((string) ($storage['resource_url'] ?? '')) !== '' ? 'configured' : 'error',
                 'storage_service_auth' => ((string) ($storage['token'] ?? '')) !== '' ? 'configured' : 'missing',
+                'storage_service' => 'error',
                 'document_store' => 'error',
             ];
 
@@ -66,9 +70,12 @@ final class Application
                 error_log('[paint] /ready database check failed: ' . $throwable->getMessage());
             }
 
+            $dependencies['storage_service'] = $this->storageReady($storage);
+
             $ready = $dependencies['mind_service_auth'] === 'configured'
                 && $dependencies['storage_service_config'] === 'configured'
                 && $dependencies['storage_service_auth'] === 'configured'
+                && $dependencies['storage_service'] === 'ready'
                 && $dependencies['database'] === 'connected'
                 && $dependencies['document_store'] === 'connected';
 
@@ -114,12 +121,15 @@ final class Application
 
             if ($operation === 'paint.create') {
                 try {
-                    return Response::json((new PaintService($this->documentStore()))->create(
+                    return Response::json($this->paintService()->create(
                         is_array($request->parsedBody()['content'] ?? null) ? $request->parsedBody()['content'] : [],
                         $caller
                     ), 201);
                 } catch (InvalidArgumentException $exception) {
                     return $this->datasetError('paint.invalid_create_call', 'invalid_call', $exception->getMessage(), 422, $caller);
+                } catch (StorageClientException $exception) {
+                    error_log('[paint] paint.create storage failed: ' . $exception->getMessage());
+                    return $this->datasetError($exception->errorCode, $exception->errorClass, $exception->getMessage(), $exception->httpStatus, $caller);
                 } catch (Throwable $throwable) {
                     error_log('[paint] paint.create failed: ' . $throwable->getMessage());
                     return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
@@ -141,6 +151,63 @@ final class Application
     private function documentStore(): DocumentStore
     {
         return new DocumentStore(Database::pdo($this->config));
+    }
+
+    private function paintService(): PaintService
+    {
+        return new PaintService($this->documentStore(), $this->storageClient());
+    }
+
+    private function storageClient(): StorageClient
+    {
+        $storage = (array) ($this->config['storage_service'] ?? []);
+
+        return new StorageClient(
+            (string) ($storage['resource_url'] ?? ''),
+            new ServiceIdentity(
+                (string) ($storage['service_name'] ?? 'paint.elonn'),
+                (string) ($storage['token'] ?? '')
+            ),
+            (int) ($storage['timeout_seconds'] ?? 8)
+        );
+    }
+
+    /** @param array<string, mixed> $storage */
+    private function storageReady(array $storage): string
+    {
+        $baseUrl = trim((string) ($storage['base_url'] ?? ''));
+        if ($baseUrl === '') {
+            return 'error';
+        }
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => (int) ($storage['timeout_seconds'] ?? 8),
+                'ignore_errors' => true,
+                'header' => 'Accept: application/json',
+            ],
+        ]);
+
+        $body = @file_get_contents(rtrim($baseUrl, '/') . '/ready', false, $context);
+        if ($body === false) {
+            return 'unavailable';
+        }
+
+        $status = 0;
+        foreach (($http_response_header ?? []) as $header) {
+            if (preg_match('#^HTTP/\S+\s+(\d{3})#', $header, $matches) === 1) {
+                $status = (int) $matches[1];
+                break;
+            }
+        }
+
+        $decoded = json_decode($body, true);
+        if ($status === 200 && is_array($decoded) && ($decoded['status'] ?? '') === 'ready') {
+            return 'ready';
+        }
+
+        return 'not_ready';
     }
 
     private function datasetError(string $code, string $class, string $message, int $status, ?AuthenticatedService $caller = null): Response

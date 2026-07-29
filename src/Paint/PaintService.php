@@ -5,14 +5,20 @@ declare(strict_types=1);
 namespace App\Paint;
 
 use App\Security\AuthenticatedService;
+use App\Storage\StorageClient;
 use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
 
 /**
  * Executes Paint-owned operations and produces canonical Service Datasets.
  */
 final class PaintService
 {
-    public function __construct(private readonly DocumentStore $documents)
+    public function __construct(
+        private readonly DocumentStore $documents,
+        private readonly StorageClient $storage,
+    )
     {
     }
 
@@ -36,7 +42,36 @@ final class PaintService
             $caller->name
         );
 
-        return $this->dataset($document, $caller);
+        $source = null;
+        $preview = null;
+
+        try {
+            $source = $this->storage->create('application/vnd.elonn.paint+json', SourceDocument::empty($width, $height), $caller->memberId);
+            $preview = $this->storage->create('image/png', PreviewImage::transparentPng(), $caller->memberId);
+            $updated = $this->documents->updateResources(
+                (string) $document['id'],
+                (string) $source['id'],
+                (string) $preview['id']
+            );
+            if ($updated === null) {
+                throw new RuntimeException('Paint document Resource links could not be saved.');
+            }
+
+            return $this->dataset($updated, $caller, [
+                $this->resourceObject($source, 'paint.source', 'Paint source'),
+                $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
+            ]);
+        } catch (Throwable $throwable) {
+            if (is_array($source ?? null)) {
+                $this->storage->delete((string) ($source['id'] ?? ''));
+            }
+            if (is_array($preview ?? null)) {
+                $this->storage->delete((string) ($preview['id'] ?? ''));
+            }
+            $this->documents->delete((string) $document['id']);
+
+            throw $throwable;
+        }
     }
 
     private function title(mixed $value): string
@@ -71,9 +106,10 @@ final class PaintService
 
     /**
      * @param array<string, mixed> $document
+     * @param array<int, array<string, mixed>> $resourceObjects
      * @return array<string, mixed>
      */
-    private function dataset(array $document, AuthenticatedService $caller): array
+    private function dataset(array $document, AuthenticatedService $caller, array $resourceObjects): array
     {
         $documentId = (string) $document['id'];
         $resources = array_values(array_filter([
@@ -113,7 +149,7 @@ final class PaintService
             ]],
             'relationships' => [],
             'collections' => [],
-            'resources' => [],
+            'resources' => $resourceObjects,
             'placements' => [[
                 'id' => 'placement:' . $documentId . ':workspace',
                 'type' => 'workspace',
@@ -127,6 +163,26 @@ final class PaintService
                 'operation' => 'paint.create',
                 'caller' => $caller->name,
                 'owner' => $caller->owner(),
+            ],
+        ];
+    }
+
+    /** @param array<string, mixed> $resource @return array<string, mixed> */
+    private function resourceObject(array $resource, string $kind, string $label): array
+    {
+        return [
+            'id' => (string) $resource['id'],
+            'type' => (string) $resource['type'],
+            'length' => (int) $resource['length'],
+            'sha256' => (string) $resource['sha256'],
+            'owner' => (string) $resource['owner'],
+            'created' => (string) $resource['created'],
+            'modified' => (string) $resource['modified'],
+            'url' => $resource['url'] ?? null,
+            'replaces' => $resource['replaces'] ?? null,
+            'content' => [
+                'kind' => $kind,
+                'label' => $label,
             ],
         ];
     }
