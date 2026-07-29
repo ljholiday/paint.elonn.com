@@ -16,11 +16,16 @@ final class ServiceAuthenticator
     {
     }
 
-    public function authenticate(Request $request): ?string
+    public function authenticate(Request $request): ?AuthenticatedService
     {
         $service = trim($request->header('x-elonn-service'));
         $token = $this->bearerToken($request->header('authorization')) ?? trim($request->header('x-elonn-service-token'));
         if ($service === '' || $token === null) {
+            return null;
+        }
+
+        $memberId = trim($request->header('x-elonn-member-id'));
+        if ($memberId !== '' && !$this->validMemberId($memberId)) {
             return null;
         }
 
@@ -29,7 +34,7 @@ final class ServiceAuthenticator
             return null;
         }
 
-        return $service;
+        return new AuthenticatedService($service, $memberId === '' ? null : $memberId);
     }
 
     private function bearerToken(string $authorization): ?string
@@ -41,5 +46,10 @@ final class ServiceAuthenticator
 
         $token = trim(substr($authorization, 7));
         return $token === '' ? null : $token;
+    }
+
+    private function validMemberId(string $memberId): bool
+    {
+        return preg_match('/^[A-Za-z0-9_.:-]{1,120}$/', $memberId) === 1;
     }
 }

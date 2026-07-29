@@ -33,12 +33,18 @@ $root = json_response($app, 'GET', '/');
 $unauthenticated = json_response($app, 'POST', '/paint/call', [], ['content' => ['operation' => 'paint.create']]);
 $missingOperation = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => []]);
 $unsupported = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => ['operation' => 'paint.create']]);
+$tokenHeader = json_response($app, 'POST', '/paint/call', [
+    'x-elonn-service' => 'mind.elonn',
+    'x-elonn-service-token' => 'test-token',
+    'x-elonn-member-id' => '99',
+], ['content' => ['operation' => 'paint.create']]);
 
 $checks = [
     'Health identifies Paint' => ($health['json']['service'] ?? '') === 'elonn_paint'
         && ($health['json']['status'] ?? '') === 'ok',
     'Ready exposes skeleton dependencies' => ($ready['status'] ?? 0) === 500
         && ($ready['json']['status'] ?? '') === 'not_ready'
+        && ($ready['json']['dependencies']['mind_service_auth'] ?? '') === 'configured'
         && ($ready['json']['dependencies']['storage_service_config'] ?? '') === 'configured'
         && array_key_exists('database', $ready['json']['dependencies'] ?? [])
         && array_key_exists('document_store', $ready['json']['dependencies'] ?? []),
@@ -48,11 +54,16 @@ $checks = [
     'Paint call requires service authentication' => ($unauthenticated['status'] ?? 0) === 401
         && has_error($unauthenticated['json'], 'paint.service_auth_failed'),
     'Paint call requires content.operation' => ($missingOperation['status'] ?? 0) === 400
-        && has_error($missingOperation['json'], 'paint.operation_required'),
+        && has_error($missingOperation['json'], 'paint.operation_required')
+        && ($missingOperation['json']['context']['caller'] ?? '') === 'mind.elonn',
     'Paint skeleton returns canonical unsupported operation' => ($unsupported['status'] ?? 0) === 422
         && has_error($unsupported['json'], 'paint.unsupported_operation')
         && ($unsupported['json']['type'] ?? '') === 'service'
         && ($unsupported['json']['context']['service'] ?? '') === 'paint',
+    'Paint accepts X-Elonn-Service-Token and member context' => ($tokenHeader['status'] ?? 0) === 422
+        && has_error($tokenHeader['json'], 'paint.unsupported_operation')
+        && ($tokenHeader['json']['context']['caller'] ?? '') === 'mind.elonn'
+        && ($tokenHeader['json']['context']['owner'] ?? '') === 'member:99',
 ];
 
 $failed = 0;

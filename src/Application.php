@@ -8,6 +8,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Paint\Database;
+use App\Security\AuthenticatedService;
 use App\Security\ServiceAuthenticator;
 use Throwable;
 
@@ -44,8 +45,10 @@ final class Application
 
         $this->router->get('/ready', function (): Response {
             $storage = (array) ($this->config['storage_service'] ?? []);
+            $serviceAuth = (array) ($this->config['service_auth'] ?? []);
             $dependencies = [
                 'database' => 'error',
+                'mind_service_auth' => ((string) ($serviceAuth['mind.elonn'] ?? '')) !== '' ? 'configured' : 'missing',
                 'storage_service_config' => ((string) ($storage['resource_url'] ?? '')) !== '' ? 'configured' : 'error',
                 'storage_service_auth' => ((string) ($storage['token'] ?? '')) !== '' ? 'configured' : 'missing',
                 'document_store' => 'error',
@@ -60,7 +63,8 @@ final class Application
                 error_log('[paint] /ready database check failed: ' . $throwable->getMessage());
             }
 
-            $ready = $dependencies['storage_service_config'] === 'configured'
+            $ready = $dependencies['mind_service_auth'] === 'configured'
+                && $dependencies['storage_service_config'] === 'configured'
                 && $dependencies['storage_service_auth'] === 'configured'
                 && $dependencies['database'] === 'connected'
                 && $dependencies['document_store'] === 'connected';
@@ -95,20 +99,21 @@ final class Application
         ]));
 
         $this->router->post('/paint/call', function (Request $request): Response {
-            if ($this->authenticatedService($request) === null) {
+            $caller = $this->authenticatedService($request);
+            if ($caller === null) {
                 return $this->datasetError('paint.service_auth_failed', 'auth', 'Paint service authentication failed.', 401);
             }
 
             $operation = (string) (($request->parsedBody()['content']['operation'] ?? ''));
             if ($operation === '') {
-                return $this->datasetError('paint.operation_required', 'invalid_call', 'Paint Call content.operation is required.', 400);
+                return $this->datasetError('paint.operation_required', 'invalid_call', 'Paint Call content.operation is required.', 400, $caller);
             }
 
-            return $this->datasetError('paint.unsupported_operation', 'invalid_call', 'Paint operation is not supported yet.', 422);
+            return $this->datasetError('paint.unsupported_operation', 'invalid_call', 'Paint operation is not supported yet.', 422, $caller);
         });
     }
 
-    private function authenticatedService(Request $request): ?string
+    private function authenticatedService(Request $request): ?AuthenticatedService
     {
         /** @var array<string, string> $tokens */
         $tokens = $this->config['service_auth'] ?? [];
@@ -116,8 +121,16 @@ final class Application
         return (new ServiceAuthenticator($tokens))->authenticate($request);
     }
 
-    private function datasetError(string $code, string $class, string $message, int $status): Response
+    private function datasetError(string $code, string $class, string $message, int $status, ?AuthenticatedService $caller = null): Response
     {
+        $context = [
+            'service' => 'paint',
+        ];
+        if ($caller !== null) {
+            $context['caller'] = $caller->name;
+            $context['owner'] = $caller->owner();
+        }
+
         return Response::json([
             'id' => 'dataset:service:paint:' . bin2hex(random_bytes(16)),
             'type' => 'service',
@@ -135,9 +148,7 @@ final class Application
                 'class' => $class,
                 'message' => $message,
             ]],
-            'context' => [
-                'service' => 'paint',
-            ],
+            'context' => $context,
         ], $status);
     }
 }

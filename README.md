@@ -13,6 +13,16 @@ Paint uses Storage for immutable Resource bytes. Paint does not own Resource byt
 
 `POST /paint/call` is the canonical Service Call entry point. It requires first-party service authentication.
 
+## Service Authentication
+
+Paint accepts first-party service calls with:
+
+- `X-Elonn-Service`
+- `Authorization: Bearer ...` or `X-Elonn-Service-Token`
+- optional `X-Elonn-Member-Id`
+
+Paint does not authenticate member credentials directly. Member identity is carried only as service-authenticated context.
+
 ## Local Setup
 
 1. Copy `.env.example` to `.env`.
