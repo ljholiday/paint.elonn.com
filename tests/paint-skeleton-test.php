@@ -8,6 +8,14 @@ use App\Http\Request;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $config = [
+    'database' => [
+        'host' => '127.0.0.1',
+        'port' => 3306,
+        'name' => 'elonn_paint',
+        'username' => 'elonn_paint',
+        'password' => '',
+        'charset' => 'utf8mb4',
+    ],
     'storage_service' => [
         'resource_url' => 'https://storage.elonn.local/resources',
         'token' => '',
@@ -32,7 +40,8 @@ $checks = [
     'Ready exposes skeleton dependencies' => ($ready['status'] ?? 0) === 500
         && ($ready['json']['status'] ?? '') === 'not_ready'
         && ($ready['json']['dependencies']['storage_service_config'] ?? '') === 'configured'
-        && ($ready['json']['dependencies']['document_store'] ?? '') === 'not_required',
+        && array_key_exists('database', $ready['json']['dependencies'] ?? [])
+        && array_key_exists('document_store', $ready['json']['dependencies'] ?? []),
     'Root describes Paint ownership' => ($root['json']['service'] ?? '') === 'elonn_paint'
         && in_array('Paint document identity', $root['json']['owns'] ?? [], true)
         && in_array('Resource byte persistence', $root['json']['does_not_own'] ?? [], true),

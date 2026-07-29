@@ -17,6 +17,8 @@ Paint uses Storage for immutable Resource bytes. Paint does not own Resource byt
 
 1. Copy `.env.example` to `.env`.
 2. Set database credentials.
-3. Set `ELONN_MIND_SERVICE_TOKEN`.
-4. Set Storage service configuration before implementing Resource-backed document creation.
-5. Run `./test.sh`.
+3. Create the configured Paint database.
+4. Apply migrations in `migrations/`.
+5. Set `ELONN_MIND_SERVICE_TOKEN`.
+6. Set Storage service configuration before implementing Resource-backed document creation.
+7. Run `./test.sh`.

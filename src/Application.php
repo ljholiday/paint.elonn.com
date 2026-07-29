@@ -7,7 +7,9 @@ namespace App;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Paint\Database;
 use App\Security\ServiceAuthenticator;
+use Throwable;
 
 /**
  * Wires Paint service routes.
@@ -43,13 +45,25 @@ final class Application
         $this->router->get('/ready', function (): Response {
             $storage = (array) ($this->config['storage_service'] ?? []);
             $dependencies = [
+                'database' => 'error',
                 'storage_service_config' => ((string) ($storage['resource_url'] ?? '')) !== '' ? 'configured' : 'error',
                 'storage_service_auth' => ((string) ($storage['token'] ?? '')) !== '' ? 'configured' : 'missing',
-                'document_store' => 'not_required',
+                'document_store' => 'error',
             ];
 
+            try {
+                $pdo = Database::pdo($this->config);
+                $pdo->query('SELECT 1');
+                $dependencies['database'] = Database::schemaReady($pdo) ? 'connected' : 'schema_missing';
+                $dependencies['document_store'] = $dependencies['database'] === 'connected' ? 'connected' : 'schema_missing';
+            } catch (Throwable $throwable) {
+                error_log('[paint] /ready database check failed: ' . $throwable->getMessage());
+            }
+
             $ready = $dependencies['storage_service_config'] === 'configured'
-                && $dependencies['storage_service_auth'] === 'configured';
+                && $dependencies['storage_service_auth'] === 'configured'
+                && $dependencies['database'] === 'connected'
+                && $dependencies['document_store'] === 'connected';
 
             return Response::json([
                 'status' => $ready ? 'ready' : 'not_ready',
