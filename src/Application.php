@@ -8,6 +8,7 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Paint\Database;
+use App\Paint\DocumentNotFoundException;
 use App\Paint\DocumentStore;
 use App\Paint\PaintService;
 use App\Security\AuthenticatedService;
@@ -132,6 +133,25 @@ final class Application
                     return $this->datasetError($exception->errorCode, $exception->errorClass, $exception->getMessage(), $exception->httpStatus, $caller);
                 } catch (Throwable $throwable) {
                     error_log('[paint] paint.create failed: ' . $throwable->getMessage());
+                    return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
+                }
+            }
+
+            if ($operation === 'paint.read') {
+                try {
+                    return Response::json($this->paintService()->read(
+                        is_array($request->parsedBody()['content'] ?? null) ? $request->parsedBody()['content'] : [],
+                        $caller
+                    ));
+                } catch (InvalidArgumentException $exception) {
+                    return $this->datasetError('paint.invalid_read_call', 'invalid_call', $exception->getMessage(), 422, $caller);
+                } catch (DocumentNotFoundException $exception) {
+                    return $this->datasetError('paint.document_not_found', 'not_found', $exception->getMessage(), 404, $caller);
+                } catch (StorageClientException $exception) {
+                    error_log('[paint] paint.read storage failed: ' . $exception->getMessage());
+                    return $this->datasetError($exception->errorCode, $exception->errorClass, $exception->getMessage(), $exception->httpStatus, $caller);
+                } catch (Throwable $throwable) {
+                    error_log('[paint] paint.read failed: ' . $throwable->getMessage());
                     return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
                 }
             }

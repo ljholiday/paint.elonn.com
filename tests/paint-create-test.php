@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Application;
 use App\Http\Request;
+use App\Paint\DocumentNotFoundException;
 use App\Paint\DocumentStore;
 use App\Paint\PaintService;
 use App\Security\AuthenticatedService;
@@ -36,11 +37,24 @@ $service = new PaintService($store, $storage);
 $dataset = $service->create(['title' => 'Sketch', 'width' => 640, 'height' => '480'], new AuthenticatedService('mind.elonn', '99'));
 $createdDocumentId = (string) ($dataset['objects'][0]['id'] ?? '');
 $persisted = $store->find($createdDocumentId);
+$readDataset = $service->read(['document_id' => $createdDocumentId], new AuthenticatedService('mind.elonn', '99'));
 $invalidWidth = null;
 try {
     $service->create(['width' => 0], new AuthenticatedService('mind.elonn', '99'));
 } catch (InvalidArgumentException $exception) {
     $invalidWidth = $exception;
+}
+$invalidRead = null;
+try {
+    $service->read(['document_id' => 'paint.document:not-valid'], new AuthenticatedService('mind.elonn', '99'));
+} catch (InvalidArgumentException $exception) {
+    $invalidRead = $exception;
+}
+$missingRead = null;
+try {
+    $service->read(['document_id' => 'paint.document:00000000000000000000000000000000'], new AuthenticatedService('mind.elonn', '99'));
+} catch (DocumentNotFoundException $exception) {
+    $missingRead = $exception;
 }
 
 $app = new Application($config);
@@ -54,7 +68,19 @@ $route = json_response($app, 'POST', '/paint/call', service_headers($config), [
 ]);
 $routeDocumentId = (string) ($route['json']['objects'][0]['id'] ?? '');
 $routePersisted = $store->find($routeDocumentId);
-$createdResourceIds = array_merge(resource_ids($dataset), resource_ids($route['json']));
+$routeRead = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.read',
+        'document_id' => $routeDocumentId,
+    ],
+]);
+$routeMissingRead = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.read',
+        'document_id' => 'paint.document:00000000000000000000000000000000',
+    ],
+]);
+$createdResourceIds = array_merge(resource_ids($dataset), resource_ids($readDataset), resource_ids($route['json']), resource_ids($routeRead['json']));
 
 $checks = [
     'paint.create returns a Service Dataset' => ($dataset['type'] ?? '') === 'service'
@@ -84,11 +110,28 @@ $checks = [
         && count($dataset['actions'] ?? []) === 1
         && ($dataset['actions'][0]['type'] ?? '') === 'open',
     'paint.create rejects invalid dimensions' => $invalidWidth instanceof InvalidArgumentException,
+    'paint.read returns current paint.document and Resource metadata' => ($readDataset['context']['operation'] ?? '') === 'paint.read'
+        && ($readDataset['objects'][0]['id'] ?? '') === $createdDocumentId
+        && ($readDataset['objects'][0]['type'] ?? '') === 'paint.document'
+        && ($readDataset['objects'][0]['content']['storage_state'] ?? '') === 'ready'
+        && ($readDataset['objects'][0]['content']['surface']['mode'] ?? '') === 'hosted'
+        && ($readDataset['objects'][0]['content']['surface']['service'] ?? '') === 'paint'
+        && ($readDataset['objects'][0]['content']['surface']['resources']['source'] ?? '') === ($dataset['objects'][0]['content']['source_resource'] ?? null)
+        && ($readDataset['objects'][0]['content']['surface']['resources']['preview'] ?? '') === ($dataset['objects'][0]['content']['preview_resource'] ?? null)
+        && count($readDataset['resources'] ?? []) === 2,
+    'paint.read rejects invalid document ids' => $invalidRead instanceof InvalidArgumentException,
+    'paint.read reports missing documents' => $missingRead instanceof DocumentNotFoundException,
     'POST /paint/call routes paint.create through DocumentStore' => ($route['status'] ?? 0) === 201
         && ($route['json']['objects'][0]['type'] ?? '') === 'paint.document'
         && ($route['json']['objects'][0]['title'] ?? '') === 'Route Sketch'
         && $routePersisted !== null
         && ($routePersisted['owner'] ?? '') === 'member:99',
+    'POST /paint/call routes paint.read through DocumentStore' => ($routeRead['status'] ?? 0) === 200
+        && ($routeRead['json']['context']['operation'] ?? '') === 'paint.read'
+        && ($routeRead['json']['objects'][0]['id'] ?? '') === $routeDocumentId
+        && count($routeRead['json']['resources'] ?? []) === 2,
+    'POST /paint/call returns not_found for missing paint.read documents' => ($routeMissingRead['status'] ?? 0) === 404
+        && ($routeMissingRead['json']['errors'][0]['code'] ?? '') === 'paint.document_not_found',
 ];
 
 foreach (array_unique($createdResourceIds) as $resourceId) {

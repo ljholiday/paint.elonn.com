@@ -57,7 +57,7 @@ final class PaintService
                 throw new RuntimeException('Paint document Resource links could not be saved.');
             }
 
-            return $this->dataset($updated, $caller, [
+            return $this->dataset($updated, $caller, 'paint.create', [
                 $this->resourceObject($source, 'paint.source', 'Paint source'),
                 $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
             ]);
@@ -72,6 +72,33 @@ final class PaintService
 
             throw $throwable;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $content
+     * @return array<string, mixed>
+     */
+    public function read(array $content, AuthenticatedService $caller): array
+    {
+        $documentId = $this->documentId($content['document_id'] ?? null);
+        $document = $this->documents->find($documentId);
+        if ($document === null) {
+            throw new DocumentNotFoundException('Paint document was not found.');
+        }
+
+        $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
+        $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
+        if ($sourceResourceId === '' || $previewResourceId === '') {
+            throw new RuntimeException('Paint document Resource links are incomplete.');
+        }
+
+        $source = $this->storage->metadata($sourceResourceId);
+        $preview = $this->storage->metadata($previewResourceId);
+
+        return $this->dataset($document, $caller, 'paint.read', [
+            $this->resourceObject($source, 'paint.source', 'Paint source'),
+            $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
+        ]);
     }
 
     private function title(mixed $value): string
@@ -104,12 +131,21 @@ final class PaintService
         return $dimension;
     }
 
+    private function documentId(mixed $value): string
+    {
+        if (!is_string($value) || preg_match('/^paint\.document:[a-f0-9]{32}$/', $value) !== 1) {
+            throw new InvalidArgumentException('Paint document id is required.');
+        }
+
+        return $value;
+    }
+
     /**
      * @param array<string, mixed> $document
      * @param array<int, array<string, mixed>> $resourceObjects
      * @return array<string, mixed>
      */
-    private function dataset(array $document, AuthenticatedService $caller, array $resourceObjects): array
+    private function dataset(array $document, AuthenticatedService $caller, string $operation, array $resourceObjects): array
     {
         $documentId = (string) $document['id'];
         $resources = array_values(array_filter([
@@ -169,7 +205,7 @@ final class PaintService
             'errors' => [],
             'context' => [
                 'service' => 'paint',
-                'operation' => 'paint.create',
+                'operation' => $operation,
                 'caller' => $caller->name,
                 'owner' => $caller->owner(),
             ],

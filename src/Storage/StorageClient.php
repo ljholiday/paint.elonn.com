@@ -64,6 +64,54 @@ final class StorageClient
         return $resource;
     }
 
+    /** @return array<string, mixed> */
+    public function metadata(string $resourceId): array
+    {
+        if (!$this->validResourceId($resourceId)) {
+            throw new StorageClientException(
+                'paint.storage_resource_invalid',
+                'dependency',
+                'Paint document references an invalid Resource.',
+                503
+            );
+        }
+
+        $response = $this->request('GET', $this->resourceUrl . '/' . rawurlencode($resourceId) . '/metadata', array_merge($this->identity->headers(), [
+            'Accept: application/json',
+        ]), '');
+
+        if ($response['status'] < 200 || $response['status'] >= 300) {
+            if ($response['status'] === 401) {
+                throw new StorageClientException(
+                    'paint.storage_service_auth_failed',
+                    'dependency',
+                    'Storage rejected Paint service authentication.',
+                    503
+                );
+            }
+
+            throw new StorageClientException(
+                'paint.storage_resource_metadata_failed',
+                'dependency',
+                $this->messageFromBody($response['body'], 'Storage could not return Resource metadata.'),
+                503
+            );
+        }
+
+        $decoded = json_decode($response['body'], true);
+        $resource = is_array($decoded) && is_array($decoded['resource'] ?? null) ? $decoded['resource'] : null;
+        if ($resource === null || !$this->validResourceId((string) ($resource['id'] ?? ''))) {
+            throw new StorageClientException(
+                'paint.storage_invalid_response',
+                'dependency',
+                'Storage did not return a valid Resource.',
+                503
+            );
+        }
+
+        return $resource;
+    }
+
     public function delete(string $resourceId): void
     {
         if (!$this->validResourceId($resourceId)) {
