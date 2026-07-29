@@ -72,6 +72,11 @@ $checks = [
         && is_resource_id((string) ($dataset['objects'][0]['content']['source_resource'] ?? ''))
         && is_resource_id((string) ($dataset['objects'][0]['content']['preview_resource'] ?? ''))
         && ($dataset['objects'][0]['content']['storage_state'] ?? '') === 'ready'
+        && ($dataset['objects'][0]['content']['surface']['mode'] ?? '') === 'hosted'
+        && ($dataset['objects'][0]['content']['surface']['service'] ?? '') === 'paint'
+        && ($dataset['objects'][0]['content']['surface']['kind'] ?? '') === 'editor'
+        && is_resource_id((string) ($dataset['objects'][0]['content']['surface']['resources']['source'] ?? ''))
+        && is_resource_id((string) ($dataset['objects'][0]['content']['surface']['resources']['preview'] ?? ''))
         && count($dataset['objects'][0]['resources'] ?? []) === 2
         && count($dataset['resources'] ?? []) === 2,
     'paint.create returns workspace placement and open Action' => count($dataset['placements'] ?? []) === 1

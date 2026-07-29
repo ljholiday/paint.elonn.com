@@ -136,6 +136,15 @@ final class PaintService
                     'source_resource' => $document['source_resource_id'] ?? null,
                     'preview_resource' => $document['preview_resource_id'] ?? null,
                     'storage_state' => $resources === [] ? 'pending_resources' : 'ready',
+                    'surface' => [
+                        'mode' => 'hosted',
+                        'service' => 'paint',
+                        'kind' => 'editor',
+                        'resources' => [
+                            'source' => $document['source_resource_id'] ?? null,
+                            'preview' => $document['preview_resource_id'] ?? null,
+                        ],
+                    ],
                 ],
                 'resources' => $resources,
             ]],
