@@ -58,6 +58,37 @@ $drawnPreviewResource = (string) ($drawDataset['objects'][0]['content']['preview
 $drawnSource = SourceDocument::decode($storage->content($drawnSourceResource));
 $drawnPreviewBytes = $storage->content($drawnPreviewResource);
 $drawPersisted = $store->find($createdDocumentId);
+$renameDataset = $service->rename([
+    'document_id' => $createdDocumentId,
+    'title' => 'Named Sketch',
+], new AuthenticatedService('mind.elonn', '99'));
+$renamedPersisted = $store->find($createdDocumentId);
+$invalidRename = null;
+try {
+    $service->rename([
+        'document_id' => $createdDocumentId,
+        'title' => str_repeat('x', 121),
+    ], new AuthenticatedService('mind.elonn', '99'));
+} catch (InvalidArgumentException $exception) {
+    $invalidRename = $exception;
+}
+$missingTitleRename = null;
+try {
+    $service->rename([
+        'document_id' => $createdDocumentId,
+    ], new AuthenticatedService('mind.elonn', '99'));
+} catch (InvalidArgumentException $exception) {
+    $missingTitleRename = $exception;
+}
+$missingRename = null;
+try {
+    $service->rename([
+        'document_id' => 'paint.document:00000000000000000000000000000000',
+        'title' => 'Missing',
+    ], new AuthenticatedService('mind.elonn', '99'));
+} catch (DocumentNotFoundException $exception) {
+    $missingRename = $exception;
+}
 $invalidWidth = null;
 try {
     $service->create(['width' => 0], new AuthenticatedService('mind.elonn', '99'));
@@ -126,6 +157,14 @@ $routeDraw = json_response($app, 'POST', '/paint/call', service_headers($config)
         ],
     ],
 ]);
+$routeRename = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.rename',
+        'document_id' => $routeDocumentId,
+        'title' => 'Route Named Sketch',
+    ],
+]);
+$routeRenamePersisted = $store->find($routeDocumentId);
 $routeMissingRead = json_response($app, 'POST', '/paint/call', service_headers($config), [
     'content' => [
         'operation' => 'paint.read',
@@ -143,13 +182,29 @@ $routeInvalidDraw = json_response($app, 'POST', '/paint/call', service_headers($
         ],
     ],
 ]);
+$routeInvalidRename = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.rename',
+        'document_id' => $routeDocumentId,
+        'title' => str_repeat('x', 121),
+    ],
+]);
+$routeMissingRename = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.rename',
+        'document_id' => 'paint.document:00000000000000000000000000000000',
+        'title' => 'Missing',
+    ],
+]);
 $createdResourceIds = array_merge(
     resource_ids($dataset),
     resource_ids($readDataset),
     resource_ids($drawDataset),
+    resource_ids($renameDataset),
     resource_ids($route['json']),
     resource_ids($routeRead['json']),
-    resource_ids($routeDraw['json'])
+    resource_ids($routeDraw['json']),
+    resource_ids($routeRename['json'])
 );
 
 $checks = [
@@ -213,6 +268,18 @@ $checks = [
         && str_starts_with($drawnPreviewBytes, "\x89PNG\r\n\x1a\n")
         && str_starts_with((string) (preview_resource($drawDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
     'paint.draw rejects incomplete strokes' => $invalidDraw instanceof InvalidArgumentException,
+    'paint.rename updates document title without replacing Resources' => ($renameDataset['context']['operation'] ?? '') === 'paint.rename'
+        && ($renameDataset['objects'][0]['id'] ?? '') === $createdDocumentId
+        && ($renameDataset['objects'][0]['title'] ?? '') === 'Named Sketch'
+        && ($renameDataset['objects'][0]['content']['name'] ?? '') === 'Named Sketch'
+        && ($renameDataset['objects'][0]['content']['source_resource'] ?? '') === $drawnSourceResource
+        && ($renameDataset['objects'][0]['content']['preview_resource'] ?? '') === $drawnPreviewResource
+        && ($renamedPersisted['title'] ?? '') === 'Named Sketch'
+        && count(source_document($renameDataset)['operations'] ?? []) === 1
+        && str_starts_with((string) (preview_resource($renameDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
+    'paint.rename rejects invalid titles and missing documents' => $invalidRename instanceof InvalidArgumentException
+        && $missingTitleRename instanceof InvalidArgumentException
+        && $missingRename instanceof DocumentNotFoundException,
     'POST /paint/call routes paint.create through DocumentStore' => ($route['status'] ?? 0) === 201
         && ($route['json']['objects'][0]['type'] ?? '') === 'paint.document'
         && ($route['json']['objects'][0]['title'] ?? '') === 'Route Sketch'
@@ -227,10 +294,20 @@ $checks = [
         && ($routeDraw['json']['objects'][0]['id'] ?? '') === $routeDocumentId
         && ($routeDraw['json']['objects'][0]['content']['source_resource'] ?? '') !== ($route['json']['objects'][0]['content']['source_resource'] ?? '')
         && ($routeDraw['json']['objects'][0]['content']['preview_resource'] ?? '') !== ($route['json']['objects'][0]['content']['preview_resource'] ?? ''),
+    'POST /paint/call routes paint.rename through DocumentStore' => ($routeRename['status'] ?? 0) === 200
+        && ($routeRename['json']['context']['operation'] ?? '') === 'paint.rename'
+        && ($routeRename['json']['objects'][0]['id'] ?? '') === $routeDocumentId
+        && ($routeRename['json']['objects'][0]['title'] ?? '') === 'Route Named Sketch'
+        && ($routeRename['json']['objects'][0]['content']['source_resource'] ?? '') === ($routeDraw['json']['objects'][0]['content']['source_resource'] ?? '')
+        && ($routeRenamePersisted['title'] ?? '') === 'Route Named Sketch',
     'POST /paint/call rejects invalid paint.draw payloads' => ($routeInvalidDraw['status'] ?? 0) === 422
         && ($routeInvalidDraw['json']['errors'][0]['code'] ?? '') === 'paint.invalid_draw_call',
+    'POST /paint/call rejects invalid paint.rename payloads' => ($routeInvalidRename['status'] ?? 0) === 422
+        && ($routeInvalidRename['json']['errors'][0]['code'] ?? '') === 'paint.invalid_rename_call',
     'POST /paint/call returns not_found for missing paint.read documents' => ($routeMissingRead['status'] ?? 0) === 404
         && ($routeMissingRead['json']['errors'][0]['code'] ?? '') === 'paint.document_not_found',
+    'POST /paint/call returns not_found for missing paint.rename documents' => ($routeMissingRename['status'] ?? 0) === 404
+        && ($routeMissingRename['json']['errors'][0]['code'] ?? '') === 'paint.document_not_found',
 ];
 
 foreach (array_unique($createdResourceIds) as $resourceId) {

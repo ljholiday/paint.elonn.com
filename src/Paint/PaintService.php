@@ -163,6 +163,23 @@ final class PaintService
         }
     }
 
+    /**
+     * @param array<string, mixed> $content
+     * @return array<string, mixed>
+     */
+    public function rename(array $content, AuthenticatedService $caller): array
+    {
+        $documentId = $this->documentId($content['document_id'] ?? null);
+        $title = $this->renameTitle($content['title'] ?? null);
+
+        $document = $this->documents->rename($documentId, $title);
+        if ($document === null) {
+            throw new DocumentNotFoundException('Paint document was not found.');
+        }
+
+        return $this->datasetWithCurrentResources($document, $caller, 'paint.rename');
+    }
+
     private function title(mixed $value): string
     {
         if ($value === null) {
@@ -174,6 +191,20 @@ final class PaintService
 
         $title = trim($value);
         return $title === '' ? 'Untitled Paint' : $title;
+    }
+
+    private function renameTitle(mixed $value): string
+    {
+        if (!is_string($value)) {
+            throw new InvalidArgumentException('Paint document title must be a string.');
+        }
+
+        $title = trim($value);
+        if ($title === '') {
+            throw new InvalidArgumentException('Paint document title is required.');
+        }
+
+        return $title;
     }
 
     private function dimension(mixed $value, int $default, string $name): int
@@ -200,6 +231,26 @@ final class PaintService
         }
 
         return $value;
+    }
+
+    /** @param array<string, mixed> $document @return array<string, mixed> */
+    private function datasetWithCurrentResources(array $document, AuthenticatedService $caller, string $operation): array
+    {
+        $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
+        $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
+        if ($sourceResourceId === '' || $previewResourceId === '') {
+            throw new RuntimeException('Paint document Resource links are incomplete.');
+        }
+
+        $sourceBytes = $this->storage->content($sourceResourceId);
+        $previewBytes = $this->storage->content($previewResourceId);
+        $source = $this->storage->metadata($sourceResourceId);
+        $preview = $this->storage->metadata($previewResourceId);
+
+        return $this->dataset($document, $caller, $operation, [
+            $this->sourceResourceObject($source, $sourceBytes),
+            $this->previewResourceObject($preview, $previewBytes),
+        ]);
     }
 
     /**

@@ -100,6 +100,30 @@ final class DocumentStore
         return $stmt->rowCount() === 1 ? $this->find($id) : null;
     }
 
+    /** @return array<string, mixed>|null */
+    public function rename(string $id, string $title): ?array
+    {
+        if (!$this->validDocumentId($id)) {
+            return null;
+        }
+
+        $title = $this->normalizeTitle($title);
+        $now = gmdate('Y-m-d H:i:s');
+        $stmt = $this->pdo->prepare(
+            'UPDATE paint_documents
+             SET title = :title,
+                 modified_at = :modified_at
+             WHERE id = :id AND deleted_at IS NULL'
+        );
+        $stmt->execute([
+            'title' => $title,
+            'modified_at' => $now,
+            'id' => $id,
+        ]);
+
+        return $stmt->rowCount() === 1 ? $this->find($id) : null;
+    }
+
     public function delete(string $id): bool
     {
         if (!$this->validDocumentId($id)) {
