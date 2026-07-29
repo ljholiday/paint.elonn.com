@@ -56,6 +56,7 @@ $drawDataset = $service->draw([
 $drawnSourceResource = (string) ($drawDataset['objects'][0]['content']['source_resource'] ?? '');
 $drawnPreviewResource = (string) ($drawDataset['objects'][0]['content']['preview_resource'] ?? '');
 $drawnSource = SourceDocument::decode($storage->content($drawnSourceResource));
+$drawnPreviewBytes = $storage->content($drawnPreviewResource);
 $drawPersisted = $store->find($createdDocumentId);
 $invalidWidth = null;
 try {
@@ -174,7 +175,8 @@ $checks = [
         && is_resource_id((string) ($dataset['objects'][0]['content']['surface']['resources']['preview'] ?? ''))
         && count($dataset['objects'][0]['resources'] ?? []) === 2
         && count($dataset['resources'] ?? []) === 2
-        && count(source_document($dataset)['operations'] ?? []) === 0,
+        && count(source_document($dataset)['operations'] ?? []) === 0
+        && str_starts_with((string) (preview_resource($dataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
     'paint.create returns workspace placement and open Action' => count($dataset['placements'] ?? []) === 1
         && ($dataset['placements'][0]['type'] ?? '') === 'workspace'
         && count($dataset['actions'] ?? []) === 1
@@ -189,22 +191,27 @@ $checks = [
         && ($readDataset['objects'][0]['content']['surface']['resources']['source'] ?? '') === ($dataset['objects'][0]['content']['source_resource'] ?? null)
         && ($readDataset['objects'][0]['content']['surface']['resources']['preview'] ?? '') === ($dataset['objects'][0]['content']['preview_resource'] ?? null)
         && count($readDataset['resources'] ?? []) === 2
-        && count(source_document($readDataset)['operations'] ?? []) === 0,
+        && count(source_document($readDataset)['operations'] ?? []) === 0
+        && str_starts_with((string) (preview_resource($readDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
     'paint.read rejects invalid document ids' => $invalidRead instanceof InvalidArgumentException,
     'paint.read reports missing documents' => $missingRead instanceof DocumentNotFoundException,
     'paint.draw appends one stroke to replacement source Resource' => ($drawDataset['context']['operation'] ?? '') === 'paint.draw'
         && ($drawDataset['objects'][0]['id'] ?? '') === $createdDocumentId
         && is_resource_id($drawnSourceResource)
         && $drawnSourceResource !== $originalSourceResource
-        && $drawnPreviewResource === $originalPreviewResource
+        && is_resource_id($drawnPreviewResource)
+        && $drawnPreviewResource !== $originalPreviewResource
         && ($drawPersisted['source_resource_id'] ?? '') === $drawnSourceResource
+        && ($drawPersisted['preview_resource_id'] ?? '') === $drawnPreviewResource
         && count($drawnSource['operations']) === 1
         && ($drawnSource['operations'][0]['type'] ?? '') === 'stroke'
         && ($drawnSource['operations'][0]['tool'] ?? '') === 'pencil'
         && ($drawnSource['operations'][0]['style']['color'] ?? '') === '#336699'
         && ($drawnSource['operations'][0]['style']['width'] ?? null) === 6
         && count($drawnSource['operations'][0]['geometry']['points'] ?? []) === 2
-        && count(source_document($drawDataset)['operations'] ?? []) === 1,
+        && count(source_document($drawDataset)['operations'] ?? []) === 1
+        && str_starts_with($drawnPreviewBytes, "\x89PNG\r\n\x1a\n")
+        && str_starts_with((string) (preview_resource($drawDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
     'paint.draw rejects incomplete strokes' => $invalidDraw instanceof InvalidArgumentException,
     'POST /paint/call routes paint.create through DocumentStore' => ($route['status'] ?? 0) === 201
         && ($route['json']['objects'][0]['type'] ?? '') === 'paint.document'
@@ -219,7 +226,7 @@ $checks = [
         && ($routeDraw['json']['context']['operation'] ?? '') === 'paint.draw'
         && ($routeDraw['json']['objects'][0]['id'] ?? '') === $routeDocumentId
         && ($routeDraw['json']['objects'][0]['content']['source_resource'] ?? '') !== ($route['json']['objects'][0]['content']['source_resource'] ?? '')
-        && ($routeDraw['json']['objects'][0]['content']['preview_resource'] ?? '') === ($route['json']['objects'][0]['content']['preview_resource'] ?? ''),
+        && ($routeDraw['json']['objects'][0]['content']['preview_resource'] ?? '') !== ($route['json']['objects'][0]['content']['preview_resource'] ?? ''),
     'POST /paint/call rejects invalid paint.draw payloads' => ($routeInvalidDraw['status'] ?? 0) === 422
         && ($routeInvalidDraw['json']['errors'][0]['code'] ?? '') === 'paint.invalid_draw_call',
     'POST /paint/call returns not_found for missing paint.read documents' => ($routeMissingRead['status'] ?? 0) === 404
@@ -293,6 +300,18 @@ function source_document(array $dataset): array
     foreach (($dataset['resources'] ?? []) as $resource) {
         if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'paint.source') && is_array($resource['content']['source'] ?? null)) {
             return $resource['content']['source'];
+        }
+    }
+
+    return [];
+}
+
+/** @param array<string, mixed> $dataset @return array<string, mixed> */
+function preview_resource(array $dataset): array
+{
+    foreach (($dataset['resources'] ?? []) as $resource) {
+        if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'paint.preview')) {
+            return $resource;
         }
     }
 

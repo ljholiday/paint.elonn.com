@@ -47,8 +47,9 @@ final class PaintService
 
         try {
             $sourceBytes = SourceDocument::empty($width, $height);
+            $previewBytes = PreviewImage::fromSource($sourceBytes);
             $source = $this->storage->create(SourceDocument::MEDIA_TYPE, $sourceBytes, $caller->memberId);
-            $preview = $this->storage->create('image/png', PreviewImage::transparentPng(), $caller->memberId);
+            $preview = $this->storage->create('image/png', $previewBytes, $caller->memberId);
             $updated = $this->documents->updateResources(
                 (string) $document['id'],
                 (string) $source['id'],
@@ -60,7 +61,7 @@ final class PaintService
 
             return $this->dataset($updated, $caller, 'paint.create', [
                 $this->sourceResourceObject($source, $sourceBytes),
-                $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
+                $this->previewResourceObject($preview, $previewBytes),
             ]);
         } catch (Throwable $throwable) {
             if (is_array($source ?? null)) {
@@ -94,12 +95,13 @@ final class PaintService
         }
 
         $sourceBytes = $this->storage->content($sourceResourceId);
+        $previewBytes = $this->storage->content($previewResourceId);
         $source = $this->storage->metadata($sourceResourceId);
         $preview = $this->storage->metadata($previewResourceId);
 
         return $this->dataset($document, $caller, 'paint.read', [
             $this->sourceResourceObject($source, $sourceBytes),
-            $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
+            $this->previewResourceObject($preview, $previewBytes),
         ]);
     }
 
@@ -128,23 +130,37 @@ final class PaintService
 
         $sourceBytes = $this->storage->content($sourceResourceId);
         $nextSourceBytes = SourceDocument::appendStroke($sourceBytes, $stroke);
-        $preview = $this->storage->metadata($previewResourceId);
-        $source = $this->storage->replace($sourceResourceId, SourceDocument::MEDIA_TYPE, $nextSourceBytes, $caller->memberId);
+        $nextPreviewBytes = PreviewImage::fromSource($nextSourceBytes);
+        $source = null;
+        $preview = null;
 
-        $updated = $this->documents->updateResources(
-            $documentId,
-            (string) $source['id'],
-            $previewResourceId
-        );
-        if ($updated === null) {
-            $this->storage->delete((string) ($source['id'] ?? ''));
-            throw new RuntimeException('Paint document Resource links could not be saved.');
+        try {
+            $source = $this->storage->replace($sourceResourceId, SourceDocument::MEDIA_TYPE, $nextSourceBytes, $caller->memberId);
+            $preview = $this->storage->replace($previewResourceId, 'image/png', $nextPreviewBytes, $caller->memberId);
+
+            $updated = $this->documents->updateResources(
+                $documentId,
+                (string) $source['id'],
+                (string) $preview['id']
+            );
+            if ($updated === null) {
+                throw new RuntimeException('Paint document Resource links could not be saved.');
+            }
+
+            return $this->dataset($updated, $caller, 'paint.draw', [
+                $this->sourceResourceObject($source, $nextSourceBytes),
+                $this->previewResourceObject($preview, $nextPreviewBytes),
+            ]);
+        } catch (Throwable $throwable) {
+            if (is_array($source ?? null)) {
+                $this->storage->delete((string) ($source['id'] ?? ''));
+            }
+            if (is_array($preview ?? null)) {
+                $this->storage->delete((string) ($preview['id'] ?? ''));
+            }
+
+            throw $throwable;
         }
-
-        return $this->dataset($updated, $caller, 'paint.draw', [
-            $this->sourceResourceObject($source, $nextSourceBytes),
-            $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
-        ]);
     }
 
     private function title(mixed $value): string
@@ -283,6 +299,15 @@ final class PaintService
     {
         $object = $this->resourceObject($resource, 'paint.source', 'Paint source');
         $object['content']['source'] = SourceDocument::decode($sourceBytes);
+
+        return $object;
+    }
+
+    /** @param array<string, mixed> $resource @return array<string, mixed> */
+    private function previewResourceObject(array $resource, string $previewBytes): array
+    {
+        $object = $this->resourceObject($resource, 'paint.preview', 'Paint preview');
+        $object['content']['data_url'] = 'data:image/png;base64,' . base64_encode($previewBytes);
 
         return $object;
     }
