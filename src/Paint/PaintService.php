@@ -12,7 +12,7 @@ use InvalidArgumentException;
  */
 final class PaintService
 {
-    public function __construct(private readonly DocumentRepository $documents)
+    public function __construct(private readonly DocumentStore $documents)
     {
     }
 

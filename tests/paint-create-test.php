@@ -4,47 +4,29 @@ declare(strict_types=1);
 
 use App\Application;
 use App\Http\Request;
-use App\Paint\DocumentRepository;
+use App\Paint\DocumentStore;
 use App\Paint\PaintService;
 use App\Security\AuthenticatedService;
+use Dotenv\Dotenv;
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+define('BASE_PATH', dirname(__DIR__));
+require BASE_PATH . '/vendor/autoload.php';
 
-final class FakeDocumentRepository implements DocumentRepository
-{
-    /** @var array<int, array<string, mixed>> */
-    public array $created = [];
-
-    public function create(
-        string $owner,
-        string $title,
-        int $width,
-        int $height,
-        ?string $sourceResourceId,
-        ?string $previewResourceId,
-        string $createdByService,
-    ): array {
-        $document = [
-            'id' => 'paint.document:' . str_repeat((string) (count($this->created) + 1), 32),
-            'owner' => $owner,
-            'title' => $title,
-            'width' => $width,
-            'height' => $height,
-            'source_resource_id' => $sourceResourceId,
-            'preview_resource_id' => $previewResourceId,
-            'created_by_service' => $createdByService,
-            'created_at' => '2026-07-29T00:00:00Z',
-            'modified_at' => '2026-07-29T00:00:00Z',
-        ];
-        $this->created[] = $document;
-
-        return $document;
-    }
+Dotenv::createImmutable(BASE_PATH)->safeLoad();
+$config = require BASE_PATH . '/config/config.php';
+$pdo = paint_test_pdo($config);
+if ($pdo === null) {
+    echo "SKIP: Configured Paint database is not accessible to the configured user.\n";
+    exit(0);
 }
+paint_test_migrate($pdo);
+paint_test_cleanup($pdo);
 
-$repo = new FakeDocumentRepository();
-$service = new PaintService($repo);
+$store = new DocumentStore($pdo);
+$service = new PaintService($store);
 $dataset = $service->create(['title' => 'Sketch', 'width' => 640, 'height' => '480'], new AuthenticatedService('mind.elonn', '99'));
+$createdDocumentId = (string) ($dataset['objects'][0]['id'] ?? '');
+$persisted = $store->find($createdDocumentId);
 $invalidWidth = null;
 try {
     $service->create(['width' => 0], new AuthenticatedService('mind.elonn', '99'));
@@ -52,17 +34,8 @@ try {
     $invalidWidth = $exception;
 }
 
-$app = new Application([
-    'database' => [],
-    'storage_service' => [
-        'resource_url' => 'https://storage.elonn.local/resources',
-        'token' => '',
-    ],
-    'service_auth' => [
-        'mind.elonn' => 'test-token',
-    ],
-], new FakeDocumentRepository());
-$route = json_response($app, 'POST', '/paint/call', service_headers(), [
+$app = new Application($config);
+$route = json_response($app, 'POST', '/paint/call', service_headers($config), [
     'content' => [
         'operation' => 'paint.create',
         'title' => 'Route Sketch',
@@ -70,15 +43,17 @@ $route = json_response($app, 'POST', '/paint/call', service_headers(), [
         'height' => 240,
     ],
 ]);
+$routeDocumentId = (string) ($route['json']['objects'][0]['id'] ?? '');
+$routePersisted = $store->find($routeDocumentId);
 
 $checks = [
     'paint.create returns a Service Dataset' => ($dataset['type'] ?? '') === 'service'
         && ($dataset['scope'] ?? '') === 'object'
         && ($dataset['mode'] ?? '') === 'snapshot'
         && ($dataset['context']['operation'] ?? '') === 'paint.create',
-    'paint.create persists stable Paint document identity' => count($repo->created) === 1
-        && ($repo->created[0]['owner'] ?? '') === 'member:99'
-        && ($repo->created[0]['created_by_service'] ?? '') === 'mind.elonn',
+    'paint.create persists stable Paint document identity' => $persisted !== null
+        && ($persisted['owner'] ?? '') === 'member:99'
+        && ($persisted['created_by_service'] ?? '') === 'mind.elonn',
     'paint.create returns paint.document Object shell without fake Resources' => count($dataset['objects'] ?? []) === 1
         && ($dataset['objects'][0]['type'] ?? '') === 'paint.document'
         && ($dataset['objects'][0]['title'] ?? '') === 'Sketch'
@@ -95,10 +70,14 @@ $checks = [
         && count($dataset['actions'] ?? []) === 1
         && ($dataset['actions'][0]['type'] ?? '') === 'open',
     'paint.create rejects invalid dimensions' => $invalidWidth instanceof InvalidArgumentException,
-    'POST /paint/call routes paint.create' => ($route['status'] ?? 0) === 201
+    'POST /paint/call routes paint.create through DocumentStore' => ($route['status'] ?? 0) === 201
         && ($route['json']['objects'][0]['type'] ?? '') === 'paint.document'
-        && ($route['json']['objects'][0]['title'] ?? '') === 'Route Sketch',
+        && ($route['json']['objects'][0]['title'] ?? '') === 'Route Sketch'
+        && $routePersisted !== null
+        && ($routePersisted['owner'] ?? '') === 'member:99',
 ];
+
+paint_test_cleanup($pdo);
 
 $failed = 0;
 foreach ($checks as $label => $passed) {
@@ -108,6 +87,41 @@ foreach ($checks as $label => $passed) {
 
 if ($failed > 0) {
     exit(1);
+}
+
+/** @param array<string, mixed> $config */
+function paint_test_pdo(array $config): ?PDO
+{
+    $database = $config['database'];
+    $dsn = sprintf(
+        'mysql:host=%s;port=%d;dbname=%s;charset=%s',
+        $database['host'],
+        $database['port'],
+        $database['name'],
+        $database['charset']
+    );
+
+    try {
+        return new PDO($dsn, $database['username'], $database['password'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    } catch (Throwable) {
+        return null;
+    }
+}
+
+function paint_test_migrate(PDO $pdo): void
+{
+    $migration = file_get_contents(BASE_PATH . '/migrations/001_create_paint_documents.sql');
+    if (is_string($migration)) {
+        $pdo->exec($migration);
+    }
+}
+
+function paint_test_cleanup(PDO $pdo): void
+{
+    $pdo->exec("DELETE FROM paint_documents WHERE created_by_service = 'mind.elonn'");
 }
 
 /**
@@ -127,12 +141,12 @@ function json_response(Application $app, string $method, string $path, array $he
     ];
 }
 
-/** @return array<string, string> */
-function service_headers(): array
+/** @param array<string, mixed> $config @return array<string, string> */
+function service_headers(array $config): array
 {
     return [
         'x-elonn-service' => 'mind.elonn',
-        'authorization' => 'Bearer test-token',
+        'authorization' => 'Bearer ' . (string) ($config['service_auth']['mind.elonn'] ?? ''),
         'x-elonn-member-id' => '99',
     ];
 }

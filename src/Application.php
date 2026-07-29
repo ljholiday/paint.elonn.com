@@ -8,7 +8,6 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Paint\Database;
-use App\Paint\DocumentRepository;
 use App\Paint\DocumentStore;
 use App\Paint\PaintService;
 use App\Security\AuthenticatedService;
@@ -24,10 +23,7 @@ final class Application
     private Router $router;
 
     /** @param array<string, mixed> $config */
-    public function __construct(
-        private readonly array $config,
-        private readonly ?DocumentRepository $documents = null,
-    )
+    public function __construct(private readonly array $config)
     {
         $this->router = new Router();
         $this->routes();
@@ -118,7 +114,7 @@ final class Application
 
             if ($operation === 'paint.create') {
                 try {
-                    return Response::json((new PaintService($this->documentRepository()))->create(
+                    return Response::json((new PaintService($this->documentStore()))->create(
                         is_array($request->parsedBody()['content'] ?? null) ? $request->parsedBody()['content'] : [],
                         $caller
                     ), 201);
@@ -142,12 +138,8 @@ final class Application
         return (new ServiceAuthenticator($tokens))->authenticate($request);
     }
 
-    private function documentRepository(): DocumentRepository
+    private function documentStore(): DocumentStore
     {
-        if ($this->documents !== null) {
-            return $this->documents;
-        }
-
         return new DocumentStore(Database::pdo($this->config));
     }
 
