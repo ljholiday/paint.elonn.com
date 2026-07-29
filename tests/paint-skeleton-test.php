@@ -32,12 +32,13 @@ $ready = json_response($app, 'GET', '/ready');
 $root = json_response($app, 'GET', '/');
 $unauthenticated = json_response($app, 'POST', '/paint/call', [], ['content' => ['operation' => 'paint.create']]);
 $missingOperation = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => []]);
-$unsupported = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => ['operation' => 'paint.create']]);
+$createUnavailable = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => ['operation' => 'paint.create']]);
+$unsupported = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => ['operation' => 'paint.draw']]);
 $tokenHeader = json_response($app, 'POST', '/paint/call', [
     'x-elonn-service' => 'mind.elonn',
     'x-elonn-service-token' => 'test-token',
     'x-elonn-member-id' => '99',
-], ['content' => ['operation' => 'paint.create']]);
+], ['content' => ['operation' => 'paint.draw']]);
 
 $checks = [
     'Health identifies Paint' => ($health['json']['service'] ?? '') === 'elonn_paint'
@@ -56,6 +57,9 @@ $checks = [
     'Paint call requires content.operation' => ($missingOperation['status'] ?? 0) === 400
         && has_error($missingOperation['json'], 'paint.operation_required')
         && ($missingOperation['json']['context']['caller'] ?? '') === 'mind.elonn',
+    'Paint create reports document store dependency when database is missing' => ($createUnavailable['status'] ?? 0) === 503
+        && has_error($createUnavailable['json'], 'paint.document_store_unavailable')
+        && ($createUnavailable['json']['context']['caller'] ?? '') === 'mind.elonn',
     'Paint skeleton returns canonical unsupported operation' => ($unsupported['status'] ?? 0) === 422
         && has_error($unsupported['json'], 'paint.unsupported_operation')
         && ($unsupported['json']['type'] ?? '') === 'service'

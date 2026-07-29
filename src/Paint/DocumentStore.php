@@ -10,7 +10,7 @@ use PDO;
 /**
  * Persists stable Paint document records separate from immutable Resources.
  */
-final class DocumentStore
+final class DocumentStore implements DocumentRepository
 {
     public function __construct(private readonly PDO $pdo)
     {

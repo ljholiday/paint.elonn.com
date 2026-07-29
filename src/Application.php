@@ -8,8 +8,12 @@ use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
 use App\Paint\Database;
+use App\Paint\DocumentRepository;
+use App\Paint\DocumentStore;
+use App\Paint\PaintService;
 use App\Security\AuthenticatedService;
 use App\Security\ServiceAuthenticator;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -20,7 +24,10 @@ final class Application
     private Router $router;
 
     /** @param array<string, mixed> $config */
-    public function __construct(private readonly array $config)
+    public function __construct(
+        private readonly array $config,
+        private readonly ?DocumentRepository $documents = null,
+    )
     {
         $this->router = new Router();
         $this->routes();
@@ -109,6 +116,20 @@ final class Application
                 return $this->datasetError('paint.operation_required', 'invalid_call', 'Paint Call content.operation is required.', 400, $caller);
             }
 
+            if ($operation === 'paint.create') {
+                try {
+                    return Response::json((new PaintService($this->documentRepository()))->create(
+                        is_array($request->parsedBody()['content'] ?? null) ? $request->parsedBody()['content'] : [],
+                        $caller
+                    ), 201);
+                } catch (InvalidArgumentException $exception) {
+                    return $this->datasetError('paint.invalid_create_call', 'invalid_call', $exception->getMessage(), 422, $caller);
+                } catch (Throwable $throwable) {
+                    error_log('[paint] paint.create failed: ' . $throwable->getMessage());
+                    return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
+                }
+            }
+
             return $this->datasetError('paint.unsupported_operation', 'invalid_call', 'Paint operation is not supported yet.', 422, $caller);
         });
     }
@@ -119,6 +140,15 @@ final class Application
         $tokens = $this->config['service_auth'] ?? [];
 
         return (new ServiceAuthenticator($tokens))->authenticate($request);
+    }
+
+    private function documentRepository(): DocumentRepository
+    {
+        if ($this->documents !== null) {
+            return $this->documents;
+        }
+
+        return new DocumentStore(Database::pdo($this->config));
     }
 
     private function datasetError(string $code, string $class, string $message, int $status, ?AuthenticatedService $caller = null): Response
