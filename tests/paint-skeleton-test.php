@@ -33,12 +33,12 @@ $root = json_response($app, 'GET', '/');
 $unauthenticated = json_response($app, 'POST', '/paint/call', [], ['content' => ['operation' => 'paint.create']]);
 $missingOperation = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => []]);
 $createUnavailable = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => ['operation' => 'paint.create']]);
-$unsupported = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => ['operation' => 'paint.draw']]);
+$unsupported = json_response($app, 'POST', '/paint/call', service_headers(), ['content' => ['operation' => 'paint.erase']]);
 $tokenHeader = json_response($app, 'POST', '/paint/call', [
     'x-elonn-service' => 'mind.elonn',
     'x-elonn-service-token' => 'test-token',
     'x-elonn-member-id' => '99',
-], ['content' => ['operation' => 'paint.draw']]);
+], ['content' => ['operation' => 'paint.erase']]);
 
 $checks = [
     'Health identifies Paint' => ($health['json']['service'] ?? '') === 'elonn_paint'

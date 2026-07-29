@@ -156,6 +156,25 @@ final class Application
                 }
             }
 
+            if ($operation === 'paint.draw') {
+                try {
+                    return Response::json($this->paintService()->draw(
+                        is_array($request->parsedBody()['content'] ?? null) ? $request->parsedBody()['content'] : [],
+                        $caller
+                    ));
+                } catch (InvalidArgumentException $exception) {
+                    return $this->datasetError('paint.invalid_draw_call', 'invalid_call', $exception->getMessage(), 422, $caller);
+                } catch (DocumentNotFoundException $exception) {
+                    return $this->datasetError('paint.document_not_found', 'not_found', $exception->getMessage(), 404, $caller);
+                } catch (StorageClientException $exception) {
+                    error_log('[paint] paint.draw storage failed: ' . $exception->getMessage());
+                    return $this->datasetError($exception->errorCode, $exception->errorClass, $exception->getMessage(), $exception->httpStatus, $caller);
+                } catch (Throwable $throwable) {
+                    error_log('[paint] paint.draw failed: ' . $throwable->getMessage());
+                    return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
+                }
+            }
+
             return $this->datasetError('paint.unsupported_operation', 'invalid_call', 'Paint operation is not supported yet.', 422, $caller);
         });
     }

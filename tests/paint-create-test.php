@@ -7,6 +7,7 @@ use App\Http\Request;
 use App\Paint\DocumentNotFoundException;
 use App\Paint\DocumentStore;
 use App\Paint\PaintService;
+use App\Paint\SourceDocument;
 use App\Security\AuthenticatedService;
 use App\Security\ServiceIdentity;
 use App\Storage\StorageClient;
@@ -38,6 +39,24 @@ $dataset = $service->create(['title' => 'Sketch', 'width' => 640, 'height' => '4
 $createdDocumentId = (string) ($dataset['objects'][0]['id'] ?? '');
 $persisted = $store->find($createdDocumentId);
 $readDataset = $service->read(['document_id' => $createdDocumentId], new AuthenticatedService('mind.elonn', '99'));
+$originalSourceResource = (string) ($dataset['objects'][0]['content']['source_resource'] ?? '');
+$originalPreviewResource = (string) ($dataset['objects'][0]['content']['preview_resource'] ?? '');
+$drawDataset = $service->draw([
+    'document_id' => $createdDocumentId,
+    'stroke' => [
+        'tool' => 'pencil',
+        'color' => '#336699',
+        'width' => 6,
+        'points' => [
+            ['x' => 10, 'y' => 20],
+            ['x' => 30, 'y' => 40],
+        ],
+    ],
+], new AuthenticatedService('mind.elonn', '99'));
+$drawnSourceResource = (string) ($drawDataset['objects'][0]['content']['source_resource'] ?? '');
+$drawnPreviewResource = (string) ($drawDataset['objects'][0]['content']['preview_resource'] ?? '');
+$drawnSource = SourceDocument::decode($storage->content($drawnSourceResource));
+$drawPersisted = $store->find($createdDocumentId);
 $invalidWidth = null;
 try {
     $service->create(['width' => 0], new AuthenticatedService('mind.elonn', '99'));
@@ -55,6 +74,19 @@ try {
     $service->read(['document_id' => 'paint.document:00000000000000000000000000000000'], new AuthenticatedService('mind.elonn', '99'));
 } catch (DocumentNotFoundException $exception) {
     $missingRead = $exception;
+}
+$invalidDraw = null;
+try {
+    $service->draw([
+        'document_id' => $createdDocumentId,
+        'stroke' => [
+            'points' => [
+                ['x' => 1, 'y' => 1],
+            ],
+        ],
+    ], new AuthenticatedService('mind.elonn', '99'));
+} catch (InvalidArgumentException $exception) {
+    $invalidDraw = $exception;
 }
 
 $app = new Application($config);
@@ -74,13 +106,50 @@ $routeRead = json_response($app, 'POST', '/paint/call', service_headers($config)
         'document_id' => $routeDocumentId,
     ],
 ]);
+$routeDraw = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.draw',
+        'document_id' => $routeDocumentId,
+        'stroke' => [
+            'tool' => 'pencil',
+            'style' => [
+                'color' => '#111111',
+                'width' => 3,
+            ],
+            'geometry' => [
+                'points' => [
+                    ['x' => 5, 'y' => 5],
+                    ['x' => 20, 'y' => 12],
+                ],
+            ],
+        ],
+    ],
+]);
 $routeMissingRead = json_response($app, 'POST', '/paint/call', service_headers($config), [
     'content' => [
         'operation' => 'paint.read',
         'document_id' => 'paint.document:00000000000000000000000000000000',
     ],
 ]);
-$createdResourceIds = array_merge(resource_ids($dataset), resource_ids($readDataset), resource_ids($route['json']), resource_ids($routeRead['json']));
+$routeInvalidDraw = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.draw',
+        'document_id' => $routeDocumentId,
+        'stroke' => [
+            'points' => [
+                ['x' => 5, 'y' => 5],
+            ],
+        ],
+    ],
+]);
+$createdResourceIds = array_merge(
+    resource_ids($dataset),
+    resource_ids($readDataset),
+    resource_ids($drawDataset),
+    resource_ids($route['json']),
+    resource_ids($routeRead['json']),
+    resource_ids($routeDraw['json'])
+);
 
 $checks = [
     'paint.create returns a Service Dataset' => ($dataset['type'] ?? '') === 'service'
@@ -121,6 +190,19 @@ $checks = [
         && count($readDataset['resources'] ?? []) === 2,
     'paint.read rejects invalid document ids' => $invalidRead instanceof InvalidArgumentException,
     'paint.read reports missing documents' => $missingRead instanceof DocumentNotFoundException,
+    'paint.draw appends one stroke to replacement source Resource' => ($drawDataset['context']['operation'] ?? '') === 'paint.draw'
+        && ($drawDataset['objects'][0]['id'] ?? '') === $createdDocumentId
+        && is_resource_id($drawnSourceResource)
+        && $drawnSourceResource !== $originalSourceResource
+        && $drawnPreviewResource === $originalPreviewResource
+        && ($drawPersisted['source_resource_id'] ?? '') === $drawnSourceResource
+        && count($drawnSource['operations']) === 1
+        && ($drawnSource['operations'][0]['type'] ?? '') === 'stroke'
+        && ($drawnSource['operations'][0]['tool'] ?? '') === 'pencil'
+        && ($drawnSource['operations'][0]['style']['color'] ?? '') === '#336699'
+        && ($drawnSource['operations'][0]['style']['width'] ?? null) === 6
+        && count($drawnSource['operations'][0]['geometry']['points'] ?? []) === 2,
+    'paint.draw rejects incomplete strokes' => $invalidDraw instanceof InvalidArgumentException,
     'POST /paint/call routes paint.create through DocumentStore' => ($route['status'] ?? 0) === 201
         && ($route['json']['objects'][0]['type'] ?? '') === 'paint.document'
         && ($route['json']['objects'][0]['title'] ?? '') === 'Route Sketch'
@@ -130,6 +212,13 @@ $checks = [
         && ($routeRead['json']['context']['operation'] ?? '') === 'paint.read'
         && ($routeRead['json']['objects'][0]['id'] ?? '') === $routeDocumentId
         && count($routeRead['json']['resources'] ?? []) === 2,
+    'POST /paint/call routes paint.draw through DocumentStore' => ($routeDraw['status'] ?? 0) === 200
+        && ($routeDraw['json']['context']['operation'] ?? '') === 'paint.draw'
+        && ($routeDraw['json']['objects'][0]['id'] ?? '') === $routeDocumentId
+        && ($routeDraw['json']['objects'][0]['content']['source_resource'] ?? '') !== ($route['json']['objects'][0]['content']['source_resource'] ?? '')
+        && ($routeDraw['json']['objects'][0]['content']['preview_resource'] ?? '') === ($route['json']['objects'][0]['content']['preview_resource'] ?? ''),
+    'POST /paint/call rejects invalid paint.draw payloads' => ($routeInvalidDraw['status'] ?? 0) === 422
+        && ($routeInvalidDraw['json']['errors'][0]['code'] ?? '') === 'paint.invalid_draw_call',
     'POST /paint/call returns not_found for missing paint.read documents' => ($routeMissingRead['status'] ?? 0) === 404
         && ($routeMissingRead['json']['errors'][0]['code'] ?? '') === 'paint.document_not_found',
 ];

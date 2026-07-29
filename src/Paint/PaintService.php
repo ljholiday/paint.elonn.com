@@ -46,7 +46,7 @@ final class PaintService
         $preview = null;
 
         try {
-            $source = $this->storage->create('application/vnd.elonn.paint+json', SourceDocument::empty($width, $height), $caller->memberId);
+            $source = $this->storage->create(SourceDocument::MEDIA_TYPE, SourceDocument::empty($width, $height), $caller->memberId);
             $preview = $this->storage->create('image/png', PreviewImage::transparentPng(), $caller->memberId);
             $updated = $this->documents->updateResources(
                 (string) $document['id'],
@@ -96,6 +96,50 @@ final class PaintService
         $preview = $this->storage->metadata($previewResourceId);
 
         return $this->dataset($document, $caller, 'paint.read', [
+            $this->resourceObject($source, 'paint.source', 'Paint source'),
+            $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $content
+     * @return array<string, mixed>
+     */
+    public function draw(array $content, AuthenticatedService $caller): array
+    {
+        $documentId = $this->documentId($content['document_id'] ?? null);
+        $stroke = $content['stroke'] ?? null;
+        if (!is_array($stroke)) {
+            throw new InvalidArgumentException('Paint draw requires a stroke.');
+        }
+
+        $document = $this->documents->find($documentId);
+        if ($document === null) {
+            throw new DocumentNotFoundException('Paint document was not found.');
+        }
+
+        $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
+        $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
+        if ($sourceResourceId === '' || $previewResourceId === '') {
+            throw new RuntimeException('Paint document Resource links are incomplete.');
+        }
+
+        $sourceBytes = $this->storage->content($sourceResourceId);
+        $nextSourceBytes = SourceDocument::appendStroke($sourceBytes, $stroke);
+        $preview = $this->storage->metadata($previewResourceId);
+        $source = $this->storage->replace($sourceResourceId, SourceDocument::MEDIA_TYPE, $nextSourceBytes, $caller->memberId);
+
+        $updated = $this->documents->updateResources(
+            $documentId,
+            (string) $source['id'],
+            $previewResourceId
+        );
+        if ($updated === null) {
+            $this->storage->delete((string) ($source['id'] ?? ''));
+            throw new RuntimeException('Paint document Resource links could not be saved.');
+        }
+
+        return $this->dataset($updated, $caller, 'paint.draw', [
             $this->resourceObject($source, 'paint.source', 'Paint source'),
             $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
         ]);
