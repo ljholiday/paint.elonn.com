@@ -5,12 +5,6 @@ declare(strict_types=1);
 use App\Paint\Database;
 use Dotenv\Dotenv;
 
-/*
- * Applies Paint SQL migrations and records checksums for production-safe reruns.
- */
-error_reporting(E_ALL);
-ini_set('display_errors', 'stderr');
-
 define('BASE_PATH', dirname(__DIR__));
 
 require BASE_PATH . '/vendor/autoload.php';
@@ -18,7 +12,6 @@ require BASE_PATH . '/vendor/autoload.php';
 Dotenv::createImmutable(BASE_PATH)->safeLoad();
 $config = require BASE_PATH . '/config/config.php';
 
-try {
 $command = $argv[1] ?? 'up';
 if (!in_array($command, ['up', 'status'], true)) {
     fwrite(STDERR, "Usage: php scripts/migrate.php [up|status]\n");
@@ -97,7 +90,3 @@ foreach ($files as $file) {
 }
 
 echo $ran === 0 ? "No pending migrations.\n" : "Applied {$ran} migration(s).\n";
-} catch (Throwable $throwable) {
-    fwrite(STDERR, 'Migration failed: ' . $throwable->getMessage() . "\n");
-    exit(1);
-}
