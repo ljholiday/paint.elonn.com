@@ -173,7 +173,8 @@ $checks = [
         && is_resource_id((string) ($dataset['objects'][0]['content']['surface']['resources']['source'] ?? ''))
         && is_resource_id((string) ($dataset['objects'][0]['content']['surface']['resources']['preview'] ?? ''))
         && count($dataset['objects'][0]['resources'] ?? []) === 2
-        && count($dataset['resources'] ?? []) === 2,
+        && count($dataset['resources'] ?? []) === 2
+        && count(source_document($dataset)['operations'] ?? []) === 0,
     'paint.create returns workspace placement and open Action' => count($dataset['placements'] ?? []) === 1
         && ($dataset['placements'][0]['type'] ?? '') === 'workspace'
         && count($dataset['actions'] ?? []) === 1
@@ -187,7 +188,8 @@ $checks = [
         && ($readDataset['objects'][0]['content']['surface']['service'] ?? '') === 'paint'
         && ($readDataset['objects'][0]['content']['surface']['resources']['source'] ?? '') === ($dataset['objects'][0]['content']['source_resource'] ?? null)
         && ($readDataset['objects'][0]['content']['surface']['resources']['preview'] ?? '') === ($dataset['objects'][0]['content']['preview_resource'] ?? null)
-        && count($readDataset['resources'] ?? []) === 2,
+        && count($readDataset['resources'] ?? []) === 2
+        && count(source_document($readDataset)['operations'] ?? []) === 0,
     'paint.read rejects invalid document ids' => $invalidRead instanceof InvalidArgumentException,
     'paint.read reports missing documents' => $missingRead instanceof DocumentNotFoundException,
     'paint.draw appends one stroke to replacement source Resource' => ($drawDataset['context']['operation'] ?? '') === 'paint.draw'
@@ -201,7 +203,8 @@ $checks = [
         && ($drawnSource['operations'][0]['tool'] ?? '') === 'pencil'
         && ($drawnSource['operations'][0]['style']['color'] ?? '') === '#336699'
         && ($drawnSource['operations'][0]['style']['width'] ?? null) === 6
-        && count($drawnSource['operations'][0]['geometry']['points'] ?? []) === 2,
+        && count($drawnSource['operations'][0]['geometry']['points'] ?? []) === 2
+        && count(source_document($drawDataset)['operations'] ?? []) === 1,
     'paint.draw rejects incomplete strokes' => $invalidDraw instanceof InvalidArgumentException,
     'POST /paint/call routes paint.create through DocumentStore' => ($route['status'] ?? 0) === 201
         && ($route['json']['objects'][0]['type'] ?? '') === 'paint.document'
@@ -282,6 +285,18 @@ function resource_ids(array $dataset): array
     }
 
     return $ids;
+}
+
+/** @param array<string, mixed> $dataset @return array<string, mixed> */
+function source_document(array $dataset): array
+{
+    foreach (($dataset['resources'] ?? []) as $resource) {
+        if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'paint.source') && is_array($resource['content']['source'] ?? null)) {
+            return $resource['content']['source'];
+        }
+    }
+
+    return [];
 }
 
 if ($failed > 0) {

@@ -46,7 +46,8 @@ final class PaintService
         $preview = null;
 
         try {
-            $source = $this->storage->create(SourceDocument::MEDIA_TYPE, SourceDocument::empty($width, $height), $caller->memberId);
+            $sourceBytes = SourceDocument::empty($width, $height);
+            $source = $this->storage->create(SourceDocument::MEDIA_TYPE, $sourceBytes, $caller->memberId);
             $preview = $this->storage->create('image/png', PreviewImage::transparentPng(), $caller->memberId);
             $updated = $this->documents->updateResources(
                 (string) $document['id'],
@@ -58,7 +59,7 @@ final class PaintService
             }
 
             return $this->dataset($updated, $caller, 'paint.create', [
-                $this->resourceObject($source, 'paint.source', 'Paint source'),
+                $this->sourceResourceObject($source, $sourceBytes),
                 $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
             ]);
         } catch (Throwable $throwable) {
@@ -92,11 +93,12 @@ final class PaintService
             throw new RuntimeException('Paint document Resource links are incomplete.');
         }
 
+        $sourceBytes = $this->storage->content($sourceResourceId);
         $source = $this->storage->metadata($sourceResourceId);
         $preview = $this->storage->metadata($previewResourceId);
 
         return $this->dataset($document, $caller, 'paint.read', [
-            $this->resourceObject($source, 'paint.source', 'Paint source'),
+            $this->sourceResourceObject($source, $sourceBytes),
             $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
         ]);
     }
@@ -140,7 +142,7 @@ final class PaintService
         }
 
         return $this->dataset($updated, $caller, 'paint.draw', [
-            $this->resourceObject($source, 'paint.source', 'Paint source'),
+            $this->sourceResourceObject($source, $nextSourceBytes),
             $this->resourceObject($preview, 'paint.preview', 'Paint preview'),
         ]);
     }
@@ -274,5 +276,14 @@ final class PaintService
                 'label' => $label,
             ],
         ];
+    }
+
+    /** @param array<string, mixed> $resource @return array<string, mixed> */
+    private function sourceResourceObject(array $resource, string $sourceBytes): array
+    {
+        $object = $this->resourceObject($resource, 'paint.source', 'Paint source');
+        $object['content']['source'] = SourceDocument::decode($sourceBytes);
+
+        return $object;
     }
 }
