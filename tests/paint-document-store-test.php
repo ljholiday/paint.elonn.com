@@ -109,9 +109,11 @@ final class PaintDocumentStoreTest
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
-            $migration = file_get_contents(BASE_PATH . '/migrations/001_create_paint_documents.sql');
-            if (is_string($migration)) {
-                $pdo->exec($migration);
+            foreach (glob(BASE_PATH . '/migrations/*.sql') ?: [] as $migrationPath) {
+                $migration = file_get_contents($migrationPath);
+                if (is_string($migration)) {
+                    $pdo->exec($migration);
+                }
             }
             $pdo->exec("DELETE FROM paint_documents WHERE created_by_service = 'paint.test'");
         } catch (Throwable) {

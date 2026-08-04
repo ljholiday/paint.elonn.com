@@ -13,6 +13,7 @@ final class Database
 {
     private const REQUIRED_TABLES = [
         'paint_documents',
+        'paint_document_search_index',
     ];
 
     /** @param array<string, mixed> $config */

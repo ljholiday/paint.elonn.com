@@ -94,6 +94,7 @@ final class Application
                 'Paint document identity',
                 'Paint document records',
                 'Paint document operations',
+                'Paint document search',
                 'Paint document lifecycle',
             ],
             'does_not_own' => [
@@ -190,6 +191,32 @@ final class Application
                     return $this->datasetError($exception->errorCode, $exception->errorClass, $exception->getMessage(), $exception->httpStatus, $caller);
                 } catch (Throwable $throwable) {
                     error_log('[paint] paint.rename failed: ' . $throwable->getMessage());
+                    return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
+                }
+            }
+
+            if ($operation === 'paint.search') {
+                try {
+                    return Response::json($this->paintService()->search(
+                        is_array($request->parsedBody()['content'] ?? null) ? $request->parsedBody()['content'] : [],
+                        $caller
+                    ));
+                } catch (InvalidArgumentException $exception) {
+                    return $this->datasetError('paint.invalid_search_call', 'invalid_call', $exception->getMessage(), 422, $caller);
+                } catch (Throwable $throwable) {
+                    error_log('[paint] paint.search failed: ' . $throwable->getMessage());
+                    return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
+                }
+            }
+
+            if ($operation === 'paint.list') {
+                try {
+                    return Response::json($this->paintService()->list(
+                        is_array($request->parsedBody()['content'] ?? null) ? $request->parsedBody()['content'] : [],
+                        $caller
+                    ));
+                } catch (Throwable $throwable) {
+                    error_log('[paint] paint.list failed: ' . $throwable->getMessage());
                     return $this->datasetError('paint.document_store_unavailable', 'dependency', 'Paint document store is unavailable.', 503, $caller);
                 }
             }

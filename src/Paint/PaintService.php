@@ -58,6 +58,7 @@ final class PaintService
             if ($updated === null) {
                 throw new RuntimeException('Paint document Resource links could not be saved.');
             }
+            $this->indexDocument($updated, $sourceBytes);
 
             return $this->dataset($updated, $caller, 'paint.create', [
                 $this->sourceResourceObject($source, $sourceBytes),
@@ -146,6 +147,7 @@ final class PaintService
             if ($updated === null) {
                 throw new RuntimeException('Paint document Resource links could not be saved.');
             }
+            $this->indexDocument($updated, $nextSourceBytes);
 
             return $this->dataset($updated, $caller, 'paint.draw', [
                 $this->sourceResourceObject($source, $nextSourceBytes),
@@ -176,8 +178,45 @@ final class PaintService
         if ($document === null) {
             throw new DocumentNotFoundException('Paint document was not found.');
         }
+        $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
+        if ($sourceResourceId !== '') {
+            $this->indexDocument($document, $this->storage->content($sourceResourceId));
+        }
 
         return $this->datasetWithCurrentResources($document, $caller, 'paint.rename');
+    }
+
+    /**
+     * @param array<string, mixed> $content
+     * @return array<string, mixed>
+     */
+    public function search(array $content, AuthenticatedService $caller): array
+    {
+        $text = trim((string) ($content['text'] ?? ''));
+        if ($text === '') {
+            throw new InvalidArgumentException('Paint search requires text.');
+        }
+
+        return $this->searchDataset(
+            $this->documents->search($caller->owner(), $text, $this->limit($content['limit'] ?? null)),
+            $caller,
+            'paint.search',
+            $text
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $content
+     * @return array<string, mixed>
+     */
+    public function list(array $content, AuthenticatedService $caller): array
+    {
+        return $this->searchDataset(
+            $this->documents->recentForOwner($caller->owner(), $this->limit($content['limit'] ?? null)),
+            $caller,
+            'paint.list',
+            ''
+        );
     }
 
     private function title(mixed $value): string
@@ -222,6 +261,15 @@ final class PaintService
         }
 
         return $dimension;
+    }
+
+    private function limit(mixed $value): int
+    {
+        if (!is_numeric($value)) {
+            return 10;
+        }
+
+        return max(1, min(25, (int) $value));
     }
 
     private function documentId(mixed $value): string
@@ -279,11 +327,18 @@ final class PaintService
                 'summary' => 'Paint document',
                 'content' => [
                     'name' => (string) $document['title'],
-                    'description' => 'Paint document',
+                    'description' => (string) ($document['semantic_summary'] ?? 'Paint document'),
                     'width' => (int) $document['width'],
                     'height' => (int) $document['height'],
                     'source_resource' => $document['source_resource_id'] ?? null,
                     'preview_resource' => $document['preview_resource_id'] ?? null,
+                    'search' => [
+                        'confidence' => $document['search_confidence'] ?? null,
+                        'semantic_summary' => $document['semantic_summary'] ?? null,
+                        'semantic_labels' => $document['semantic_labels'] ?? [],
+                        'index_status' => $document['index_status'] ?? null,
+                        'indexed_at' => $document['indexed_at'] ?? null,
+                    ],
                     'storage_state' => $resources === [] ? 'pending_resources' : 'ready',
                     'surface' => [
                         'mode' => 'hosted',
@@ -323,6 +378,113 @@ final class PaintService
                 'owner' => $caller->owner(),
             ],
         ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $documents
+     * @return array<string, mixed>
+     */
+    private function searchDataset(array $documents, AuthenticatedService $caller, string $operation, string $text): array
+    {
+        $objects = [];
+        $actions = [];
+        $placements = [];
+        foreach ($documents as $document) {
+            $dataset = $this->dataset($document, $caller, $operation, []);
+            $object = $dataset['objects'][0] ?? null;
+            if (is_array($object)) {
+                $objects[] = $object;
+                $actions = array_merge($actions, $dataset['actions']);
+                $placements = array_merge($placements, $dataset['placements']);
+            }
+        }
+
+        $collections = [];
+        if (count($objects) !== 1) {
+            $collectionId = 'collection:paint.search:' . bin2hex(random_bytes(8));
+            $summary = count($objects) === 0
+                ? ($text !== '' ? 'No Paint documents matched "' . $text . '".' : 'No Paint documents are available.')
+                : count($objects) . ' Paint documents matched.';
+            $collections[] = [
+                'id' => $collectionId,
+                'type' => 'paint.document.results',
+                'title' => $text !== '' ? 'Paint results for ' . $text : 'Recent Paint documents',
+                'summary' => $summary,
+                'items' => array_map(static fn (array $object): string => (string) $object['id'], $objects),
+                'content' => [
+                    'description' => $summary,
+                    'query' => $text,
+                    'count' => count($objects),
+                ],
+            ];
+            $placements[] = [
+                'id' => 'placement:' . $collectionId . ':workspace',
+                'type' => 'workspace',
+                'content' => [
+                    'collection' => $collectionId,
+                ],
+            ];
+        }
+
+        return [
+            'id' => 'dataset:service:paint:' . bin2hex(random_bytes(16)),
+            'type' => 'service',
+            'scope' => count($objects) === 1 ? 'object' : 'collection',
+            'mode' => 'snapshot',
+            'created' => gmdate('c'),
+            'objects' => $objects,
+            'actions' => $actions,
+            'relationships' => [],
+            'collections' => $collections,
+            'resources' => [],
+            'placements' => $placements,
+            'errors' => [],
+            'context' => [
+                'service' => 'paint',
+                'operation' => $operation,
+                'caller' => $caller->name,
+                'owner' => $caller->owner(),
+                'search' => [
+                    'text' => $text,
+                    'count' => count($objects),
+                ],
+            ],
+        ];
+    }
+
+    private function indexDocument(array $document, string $sourceBytes): void
+    {
+        $source = SourceDocument::decode($sourceBytes);
+        $operations = is_array($source['operations'] ?? null) ? $source['operations'] : [];
+        $labels = ['paint document'];
+        if ($operations === []) {
+            $labels[] = 'empty drawing';
+            $summary = 'Empty Paint document';
+        } else {
+            $labels[] = 'drawing';
+            $labels[] = 'sketch';
+            $labels[] = 'pencil';
+            $colors = [];
+            foreach ($operations as $operation) {
+                $style = is_array($operation['style'] ?? null) ? $operation['style'] : [];
+                $color = strtolower((string) ($style['color'] ?? ''));
+                if ($color !== '') {
+                    $colors[] = $color;
+                }
+            }
+            foreach (array_unique($colors) as $color) {
+                $labels[] = $color;
+            }
+            $summary = 'Paint drawing with ' . count($operations) . ' operation' . (count($operations) === 1 ? '' : 's');
+        }
+
+        $title = trim((string) ($document['title'] ?? ''));
+        if ($title !== '' && strtolower($title) !== 'untitled paint') {
+            $labels[] = $title;
+            $summary .= ': ' . $title;
+        }
+
+        $this->documents->indexDocument($document, $summary, $labels);
     }
 
     /** @param array<string, mixed> $resource @return array<string, mixed> */
