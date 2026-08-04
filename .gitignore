@@ -1,3 +1,6 @@
 .env
 storage/logs/*
 !storage/logs/.gitkeep
+error_log
+public/favicon.ico
+public/robots.txt
