@@ -65,6 +65,9 @@ $renameDataset = $service->rename([
     'title' => 'Named Sketch',
 ], new AuthenticatedService('mind.elonn', '99'));
 $renamedPersisted = $store->find($createdDocumentId);
+$workspaceSearchDataset = $service->search(['text' => 'paint'], new AuthenticatedService('mind.elonn', '99'));
+$savedDocumentSearchDataset = $service->search(['text' => 'Named Sketch'], new AuthenticatedService('mind.elonn', '99'));
+$inflectedDocumentSearchDataset = $service->search(['text' => 'paintings'], new AuthenticatedService('mind.elonn', '99'));
 $invalidRename = null;
 try {
     $service->rename([
@@ -167,6 +170,12 @@ $routeRename = json_response($app, 'POST', '/paint/call', service_headers($confi
     ],
 ]);
 $routeRenamePersisted = $store->find($routeDocumentId);
+$routeSearch = json_response($app, 'POST', '/paint/call', service_headers($config), [
+    'content' => [
+        'operation' => 'paint.search',
+        'text' => 'paint',
+    ],
+]);
 $routeMissingRead = json_response($app, 'POST', '/paint/call', service_headers($config), [
     'content' => [
         'operation' => 'paint.read',
@@ -289,7 +298,18 @@ $checks = [
         && ($routePersisted['owner'] ?? '') === 'member:99',
     'Paint publishes a Mind-facing service descriptor' => ($descriptor['service'] ?? '') === 'paint'
         && isset($descriptor['operations']['paint.draw']['supports'])
-        && ($descriptor['operations']['paint.draw']['target_field'] ?? '') === 'document_id',
+        && ($descriptor['operations']['paint.draw']['target_field'] ?? '') === 'document_id'
+        && (($descriptor['operations']['paint.search']['input_schema']['additionalProperties'] ?? null) === false)
+        && (($descriptor['operations']['paint.create']['input_schema']['additionalProperties'] ?? null) === false),
+    'paint.search returns a selectable Paint workspace result without creating a document' => ($workspaceSearchDataset['context']['operation'] ?? '') === 'paint.search'
+        && count(array_values(array_filter($workspaceSearchDataset['objects'] ?? [], static fn (array $object): bool => ($object['type'] ?? '') === 'paint.workspace'))) === 1
+        && ($workspaceSearchDataset['actions'][0]['content']['operation_invocation']['operation'] ?? '') === 'paint.create'
+        && ($workspaceSearchDataset['actions'][0]['target'] ?? '') === 'paint.workspace'
+        && $store->find('paint.workspace') === null,
+    'paint.search returns matching saved Paint documents' => in_array($createdDocumentId, object_ids($savedDocumentSearchDataset), true)
+        && count(array_values(array_filter($savedDocumentSearchDataset['objects'] ?? [], static fn (array $object): bool => ($object['type'] ?? '') === 'paint.workspace'))) === 0,
+    'paint.search normalizes inflected document queries internally' => in_array($createdDocumentId, object_ids($inflectedDocumentSearchDataset), true)
+        && in_array('paint.workspace', object_ids($inflectedDocumentSearchDataset), true),
     'POST /paint/call routes paint.read through DocumentStore' => ($routeRead['status'] ?? 0) === 200
         && ($routeRead['json']['context']['operation'] ?? '') === 'paint.read'
         && ($routeRead['json']['objects'][0]['id'] ?? '') === $routeDocumentId
@@ -305,6 +325,9 @@ $checks = [
         && ($routeRename['json']['objects'][0]['title'] ?? '') === 'Route Named Sketch'
         && ($routeRename['json']['objects'][0]['content']['source_resource'] ?? '') === ($routeDraw['json']['objects'][0]['content']['source_resource'] ?? '')
         && ($routeRenamePersisted['title'] ?? '') === 'Route Named Sketch',
+    'POST /paint/call routes paint.search workspace results' => ($routeSearch['status'] ?? 0) === 200
+        && in_array('paint.workspace', object_ids($routeSearch['json']), true)
+        && ($routeSearch['json']['actions'][0]['content']['operation_invocation']['operation'] ?? '') === 'paint.create',
     'POST /paint/call rejects invalid paint.draw payloads' => ($routeInvalidDraw['status'] ?? 0) === 422
         && ($routeInvalidDraw['json']['errors'][0]['code'] ?? '') === 'paint.invalid_draw_call',
     'POST /paint/call rejects invalid paint.rename payloads' => ($routeInvalidRename['status'] ?? 0) === 422
@@ -370,6 +393,19 @@ function resource_ids(array $dataset): array
     foreach (($dataset['resources'] ?? []) as $resource) {
         if (is_array($resource) && is_resource_id((string) ($resource['id'] ?? ''))) {
             $ids[] = (string) $resource['id'];
+        }
+    }
+
+    return $ids;
+}
+
+/** @param array<string, mixed> $dataset @return array<int, string> */
+function object_ids(array $dataset): array
+{
+    $ids = [];
+    foreach (($dataset['objects'] ?? []) as $object) {
+        if (is_array($object) && is_string($object['id'] ?? null)) {
+            $ids[] = $object['id'];
         }
     }
 

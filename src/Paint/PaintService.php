@@ -197,8 +197,15 @@ final class PaintService
             throw new InvalidArgumentException('Paint search requires text.');
         }
 
+        $limit = $this->limit($content['limit'] ?? null);
+        $documents = $this->documents->search($caller->owner(), $text, $limit);
+        $normalizedText = $this->normalizedSearchText($text);
+        if ($documents === [] && $normalizedText !== '' && $normalizedText !== mb_strtolower($text)) {
+            $documents = $this->documents->search($caller->owner(), $normalizedText, $limit);
+        }
+
         return $this->searchDataset(
-            $this->documents->search($caller->owner(), $text, $this->limit($content['limit'] ?? null)),
+            $documents,
             $caller,
             'paint.search',
             $text
@@ -386,9 +393,19 @@ final class PaintService
      */
     private function searchDataset(array $documents, AuthenticatedService $caller, string $operation, string $text): array
     {
-        $objects = [];
+        $objects = $this->matchesPaintWorkspace($text) ? [$this->paintWorkspaceObject()] : [];
         $actions = [];
         $placements = [];
+        if ($objects !== []) {
+            $actions[] = $this->paintWorkspaceAction();
+            $placements[] = [
+                'id' => 'placement:paint.workspace:workspace',
+                'type' => 'workspace',
+                'content' => [
+                    'object' => 'paint.workspace',
+                ],
+            ];
+        }
         foreach ($documents as $document) {
             $dataset = $this->dataset($document, $caller, $operation, []);
             $object = $dataset['objects'][0] ?? null;
@@ -404,10 +421,10 @@ final class PaintService
             $collectionId = 'collection:paint.search:' . bin2hex(random_bytes(8));
             $summary = count($objects) === 0
                 ? ($text !== '' ? 'No Paint documents matched "' . $text . '".' : 'No Paint documents are available.')
-                : count($objects) . ' Paint documents matched.';
+                : count($objects) . ' Paint results matched.';
             $collections[] = [
                 'id' => $collectionId,
-                'type' => 'paint.document.results',
+                'type' => 'paint.results',
                 'title' => $text !== '' ? 'Paint results for ' . $text : 'Recent Paint documents',
                 'summary' => $summary,
                 'items' => array_map(static fn (array $object): string => (string) $object['id'], $objects),
@@ -450,6 +467,82 @@ final class PaintService
                 ],
             ],
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function paintWorkspaceObject(): array
+    {
+        return [
+            'id' => 'paint.workspace',
+            'type' => 'paint.workspace',
+            'title' => 'Paint',
+            'summary' => 'Paint drawing workspace',
+            'content' => [
+                'name' => 'Paint',
+                'description' => 'Create a new Paint drawing document.',
+                'service' => 'paint',
+                'kind' => 'drawing_workspace',
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function paintWorkspaceAction(): array
+    {
+        return [
+            'id' => 'action:paint.workspace:create',
+            'type' => 'operation',
+            'target' => 'paint.workspace',
+            'content' => [
+                'label' => 'Create drawing',
+                'operation_invocation' => [
+                    'service' => 'paint',
+                    'operation' => 'paint.create',
+                    'object_id' => 'paint.workspace',
+                    'payload' => [],
+                ],
+                'availability' => [
+                    'state' => 'enabled',
+                ],
+            ],
+        ];
+    }
+
+    private function matchesPaintWorkspace(string $text): bool
+    {
+        $normalized = $this->normalizedSearchText($text);
+
+        return in_array($normalized, ['paint', 'draw', 'sketch', 'canvas', 'artwork'], true);
+    }
+
+    private function normalizedSearchText(string $text): string
+    {
+        $tokens = preg_split('/[^a-z0-9]+/i', mb_strtolower($text)) ?: [];
+        $normalized = [];
+        foreach ($tokens as $token) {
+            $token = trim($token);
+            if ($token === '') {
+                continue;
+            }
+            $normalized[] = $this->stemToken($token);
+        }
+
+        return trim(implode(' ', array_values(array_filter($normalized))));
+    }
+
+    private function stemToken(string $token): string
+    {
+        foreach (['ings', 'ing', 'ies', 'es', 's'] as $suffix) {
+            if (strlen($token) > strlen($suffix) + 2 && str_ends_with($token, $suffix)) {
+                if ($suffix === 'ies') {
+                    return substr($token, 0, -3) . 'y';
+                }
+
+                return substr($token, 0, -strlen($suffix));
+            }
+        }
+
+        return $token;
     }
 
     private function indexDocument(array $document, string $sourceBytes): void
