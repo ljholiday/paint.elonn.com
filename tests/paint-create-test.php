@@ -10,6 +10,7 @@ use App\Paint\PaintService;
 use App\Paint\SourceDocument;
 use App\Security\AuthenticatedService;
 use App\Security\ServiceIdentity;
+use App\ServiceDescriptor;
 use App\Storage\StorageClient;
 use App\Storage\StorageClientException;
 use Dotenv\Dotenv;
@@ -19,6 +20,7 @@ require BASE_PATH . '/vendor/autoload.php';
 
 Dotenv::createImmutable(BASE_PATH)->safeLoad();
 $config = require BASE_PATH . '/config/config.php';
+$descriptor = ServiceDescriptor::payload();
 $pdo = paint_test_pdo($config);
 if ($pdo === null) {
     echo "SKIP: Configured Paint database is not accessible to the configured user.\n";
@@ -285,6 +287,9 @@ $checks = [
         && ($route['json']['objects'][0]['title'] ?? '') === 'Route Sketch'
         && $routePersisted !== null
         && ($routePersisted['owner'] ?? '') === 'member:99',
+    'Paint publishes a Mind-facing service descriptor' => ($descriptor['service'] ?? '') === 'paint'
+        && isset($descriptor['operations']['paint.draw']['supports'])
+        && ($descriptor['operations']['paint.draw']['target_field'] ?? '') === 'document_id',
     'POST /paint/call routes paint.read through DocumentStore' => ($routeRead['status'] ?? 0) === 200
         && ($routeRead['json']['context']['operation'] ?? '') === 'paint.read'
         && ($routeRead['json']['objects'][0]['id'] ?? '') === $routeDocumentId

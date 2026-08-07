@@ -28,6 +28,7 @@ $config = [
 $app = new Application($config);
 
 $health = json_response($app, 'GET', '/health');
+$descriptor = json_response($app, 'GET', '/descriptor');
 $ready = json_response($app, 'GET', '/ready');
 $root = json_response($app, 'GET', '/');
 $unauthenticated = json_response($app, 'POST', '/paint/call', [], ['content' => ['operation' => 'paint.create']]);
@@ -43,6 +44,10 @@ $tokenHeader = json_response($app, 'POST', '/paint/call', [
 $checks = [
     'Health identifies Paint' => ($health['json']['service'] ?? '') === 'elonn_paint'
         && ($health['json']['status'] ?? '') === 'ok',
+    'Paint publishes a Mind-facing service descriptor' => ($descriptor['status'] ?? 0) === 200
+        && ($descriptor['json']['service'] ?? '') === 'paint'
+        && isset($descriptor['json']['operations']['paint.draw']['supports'])
+        && ($descriptor['json']['operations']['paint.draw']['target_field'] ?? '') === 'document_id',
     'Ready exposes skeleton dependencies' => ($ready['status'] ?? 0) === 500
         && ($ready['json']['status'] ?? '') === 'not_ready'
         && ($ready['json']['dependencies']['mind_service_auth'] ?? '') === 'configured'

@@ -49,6 +49,7 @@ final class Application
             'status' => 'ok',
             'service' => 'elonn_paint',
         ]));
+        $this->router->get('/descriptor', fn (): Response => Response::json(ServiceDescriptor::payload()));
 
         $this->router->get('/ready', function (): Response {
             $storage = (array) ($this->config['storage_service'] ?? []);
