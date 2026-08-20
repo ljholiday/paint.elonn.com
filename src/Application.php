@@ -14,6 +14,7 @@ use App\Paint\PaintService;
 use App\Security\AuthenticatedService;
 use App\Security\ServiceAuthenticator;
 use App\Security\ServiceIdentity;
+use App\Security\SignedRequestVerifier;
 use App\Storage\StorageClient;
 use App\Storage\StorageClientException;
 use InvalidArgumentException;
@@ -230,8 +231,9 @@ final class Application
     {
         /** @var array<string, string> $tokens */
         $tokens = $this->config['service_auth'] ?? [];
+        $verifier = new SignedRequestVerifier((string) ($tokens['conductor_keys_url'] ?? ''));
 
-        return (new ServiceAuthenticator($tokens))->authenticate($request);
+        return (new ServiceAuthenticator($tokens, $verifier))->authenticate($request);
     }
 
     private function documentStore(): DocumentStore

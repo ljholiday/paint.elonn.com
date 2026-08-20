@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Request;
 use App\Security\ServiceAuthenticator;
 use App\Security\ServiceIdentity;
+use App\Security\SignedRequestVerifier;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -12,6 +13,10 @@ $authenticator = new ServiceAuthenticator([
     'mind.elonn' => 'mind-token',
     'admin.elonn' => 'admin-token',
 ]);
+$signedAuthenticator = new ServiceAuthenticator(
+    ['mind.elonn' => 'mind-token'],
+    new SignedRequestVerifier('', ['test-key' => paint_test_public_key()])
+);
 
 $bearer = $authenticator->authenticate(Request::testing('POST', '/paint/call', [
     'x-elonn-service' => 'mind.elonn',
@@ -37,6 +42,18 @@ $invalidMember = $authenticator->authenticate(Request::testing('POST', '/paint/c
 ]));
 $storageIdentity = new ServiceIdentity('paint.elonn', 'storage-token');
 
+$signedBody = json_encode(['id' => 'call:conductor:paint:test'], JSON_UNESCAPED_SLASHES) ?: '{}';
+$conductorSigned = $signedAuthenticator->authenticate(Request::testing('POST', '/paint/call', [
+    'x-elonn-service' => 'conductor.elonn',
+    'x-elonn-member-id' => '77',
+] + paint_signed_headers('POST', '/paint/call', $signedBody), $signedBody));
+$conductorBadSignature = $signedAuthenticator->authenticate(Request::testing('POST', '/paint/call', [
+    'x-elonn-service' => 'conductor.elonn',
+] + paint_signed_headers('POST', '/paint/call', $signedBody), '{"tampered":true}'));
+$conductorWithoutVerifier = $authenticator->authenticate(Request::testing('POST', '/paint/call', [
+    'x-elonn-service' => 'conductor.elonn',
+] + paint_signed_headers('POST', '/paint/call', $signedBody), $signedBody));
+
 $checks = [
     'Bearer token authenticates first-party caller' => $bearer !== null
         && $bearer->name === 'mind.elonn'
@@ -49,6 +66,11 @@ $checks = [
     'Mismatched service token is rejected' => $wrong === null,
     'Unknown service caller is rejected' => $unknown === null,
     'Malformed member context is rejected' => $invalidMember === null,
+    'Conductor signed request is authenticated without a static token' => $conductorSigned !== null
+        && $conductorSigned->name === 'conductor.elonn'
+        && $conductorSigned->memberId === '77',
+    'Conductor signature is rejected when the body does not match the digest' => $conductorBadSignature === null,
+    'Conductor caller without a configured verifier falls through and is rejected (no static token either)' => $conductorWithoutVerifier === null,
     'Outbound service identity emits Elonn service auth headers' => $storageIdentity->headers() === [
         'Authorization: Bearer storage-token',
         'X-Elonn-Service: paint.elonn',
@@ -64,4 +86,46 @@ foreach ($checks as $label => $passed) {
 
 if ($failed > 0) {
     exit(1);
+}
+
+/**
+ * @return array<string, string>
+ */
+function paint_signed_headers(string $method, string $path, string $body): array
+{
+    $timestamp = (string) time();
+    $digest = base64_encode(hash('sha256', $body, true));
+    $canonical = implode("\n", [strtoupper($method), $path, $timestamp, $digest]);
+    $signature = '';
+    if (!openssl_sign($canonical, $signature, paint_test_private_key(), OPENSSL_ALGO_SHA256)) {
+        throw new RuntimeException('Unable to sign Paint test request.');
+    }
+
+    return [
+        'x-elonn-key-id' => 'test-key',
+        'x-elonn-timestamp' => $timestamp,
+        'x-elonn-body-sha256' => $digest,
+        'x-elonn-signature' => base64_encode($signature),
+    ];
+}
+
+function paint_test_private_key(): string
+{
+    static $privateKeyPem = null;
+    if ($privateKeyPem === null) {
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        if ($key === false || !openssl_pkey_export($key, $privateKeyPem)) {
+            throw new RuntimeException('Unable to generate Paint test signing key.');
+        }
+    }
+
+    return $privateKeyPem;
+}
+
+function paint_test_public_key(): string
+{
+    $key = openssl_pkey_get_private(paint_test_private_key());
+    $details = $key === false ? false : openssl_pkey_get_details($key);
+
+    return is_array($details) ? (string) ($details['key'] ?? '') : '';
 }

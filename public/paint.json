@@ -1,0 +1,169 @@
+{
+  "service": {
+    "id": "paint.elonn",
+    "name": "Paint",
+    "domain": "creative",
+    "purpose": "Owns Paint drawing document identity, records, operations, and lifecycle. Uses Storage for immutable Resource bytes; does not own Resource byte persistence, runtime presentation, World placement, or member authentication."
+  },
+  "contract": {
+    "revision": 1,
+    "published": "2026-08-20T00:00:00Z"
+  },
+  "invocation": {
+    "base_url": "https://paint.elonn.com"
+  },
+  "authentication": {
+    "required": true,
+    "scheme": "elonn-signed-request"
+  },
+  "endpoints": [
+    {
+      "id": "paint.call",
+      "method": "POST",
+      "path": "/paint/call",
+      "purpose": "Accept one authenticated canonical Call for Paint operations and return one canonical Service Dataset.",
+      "operations": [
+        {
+          "id": "paint.create",
+          "purpose": "Create a new Paint document for drawing after the member selects a Paint-owned creation action.",
+          "model_selectable": true,
+          "arguments": {
+            "title": {"type": "string", "required": false, "source": "model", "default": "Untitled Paint"},
+            "width": {"type": "integer", "required": false, "source": "model", "default": 1024},
+            "height": {"type": "integer", "required": false, "source": "model", "default": 768}
+          }
+        },
+        {
+          "id": "paint.search",
+          "purpose": "Search Paint-owned visual artwork results, including the drawing workspace for broad creation intent and the member's own documents by title or indexed drawing content.",
+          "model_selectable": true,
+          "arguments": {
+            "text": {"type": "string", "required": true, "source": "model"},
+            "limit": {"type": "integer", "required": false, "source": "model", "default": 10}
+          }
+        },
+        {
+          "id": "paint.list",
+          "purpose": "Show recent Paint documents owned by the member.",
+          "model_selectable": true,
+          "arguments": {
+            "limit": {"type": "integer", "required": false, "source": "model", "default": 10}
+          }
+        },
+        {
+          "id": "paint.read",
+          "purpose": "Open an existing Paint document already identified by a prior Dataset action -- never selected from a raw query.",
+          "model_selectable": false,
+          "arguments": {
+            "document_id": {"type": "string", "required": true, "source": "context", "context_key": "object_id"}
+          }
+        },
+        {
+          "id": "paint.draw",
+          "purpose": "Add a completed drawing stroke to an existing Paint document already identified by a prior Dataset action.",
+          "model_selectable": false,
+          "arguments": {
+            "document_id": {"type": "string", "required": true, "source": "context", "context_key": "object_id"},
+            "stroke": {"type": "array", "required": true, "source": "model"}
+          }
+        },
+        {
+          "id": "paint.rename",
+          "purpose": "Rename an existing Paint document already identified by a prior Dataset action.",
+          "model_selectable": false,
+          "arguments": {
+            "document_id": {"type": "string", "required": true, "source": "context", "context_key": "object_id"},
+            "title": {"type": "string", "required": true, "source": "model"}
+          }
+        }
+      ],
+      "request": {
+        "structure": "Call"
+      },
+      "response": {
+        "structure": "Dataset"
+      },
+      "authorization": [
+        "conductor.elonn",
+        "mind.elonn"
+      ],
+      "side_effects": true,
+      "privacy": [
+        "Paint document access and mutation is scoped to the authenticated member identity supplied by the calling platform service."
+      ],
+      "errors": [
+        "paint.service_auth_failed",
+        "paint.operation_required",
+        "paint.unsupported_operation",
+        "paint.invalid_create_call",
+        "paint.invalid_read_call",
+        "paint.invalid_draw_call",
+        "paint.invalid_rename_call",
+        "paint.invalid_search_call",
+        "paint.document_not_found",
+        "paint.document_store_unavailable"
+      ]
+    }
+  ],
+  "structures": {
+    "canonical": [
+      "Call",
+      "Dataset"
+    ],
+    "service": [
+      "Paint document object"
+    ]
+  },
+  "errors": [
+    {
+      "code": "paint.service_auth_failed",
+      "class": "auth",
+      "message": "Authenticated Conductor or Mind service request is required."
+    },
+    {
+      "code": "paint.operation_required",
+      "class": "invalid_call",
+      "message": "Call.content.operation is required."
+    },
+    {
+      "code": "paint.unsupported_operation",
+      "class": "invalid_call",
+      "message": "Paint operation is not supported."
+    },
+    {
+      "code": "paint.invalid_create_call",
+      "class": "invalid_call",
+      "message": "Paint create Call content is invalid."
+    },
+    {
+      "code": "paint.invalid_read_call",
+      "class": "invalid_call",
+      "message": "Paint read Call content is invalid."
+    },
+    {
+      "code": "paint.invalid_draw_call",
+      "class": "invalid_call",
+      "message": "Paint draw Call content is invalid."
+    },
+    {
+      "code": "paint.invalid_rename_call",
+      "class": "invalid_call",
+      "message": "Paint rename Call content is invalid."
+    },
+    {
+      "code": "paint.invalid_search_call",
+      "class": "invalid_call",
+      "message": "Paint search Call content is invalid."
+    },
+    {
+      "code": "paint.document_not_found",
+      "class": "not_found",
+      "message": "Paint document was not found."
+    },
+    {
+      "code": "paint.document_store_unavailable",
+      "class": "dependency",
+      "message": "Paint document store is unavailable."
+    }
+  ]
+}

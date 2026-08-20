@@ -29,6 +29,7 @@ return [
     'service_auth' => [
         'mind.elonn' => paint_string_config('ELONN_MIND_SERVICE_TOKEN'),
         'admin.elonn' => paint_string_config('ELONN_ADMIN_SERVICE_TOKEN'),
+        'conductor_keys_url' => rtrim(paint_string_config('CONDUCTOR_SERVICE_KEYS_URL', 'https://conductor.elonn.local/.well-known/elonn-service-keys.json'), '/'),
     ],
 ];
 

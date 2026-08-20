@@ -1,0 +1,28 @@
+{
+  "service": {
+    "id": "paint.elonn",
+    "name": "Paint",
+    "domain": "creative",
+    "description": "Owns Paint drawing document identity, records, and lifecycle; provides a workspace for creating and editing drawings."
+  },
+  "capabilities": [
+    {
+      "id": "drawing_creation",
+      "description": "Create a new Paint drawing document."
+    },
+    {
+      "id": "drawing_document_search",
+      "description": "Find the member's own Paint documents by title or indexed drawing content, and the drawing workspace for broad creation intent."
+    },
+    {
+      "id": "drawing_document_list",
+      "description": "List the member's recent Paint documents."
+    }
+  ],
+  "contract": {
+    "json": "https://paint.elonn.com/paint.json",
+    "markdown": "https://paint.elonn.com/paint.md",
+    "revision": 1
+  },
+  "published": "2026-08-20T00:00:00Z"
+}

@@ -12,20 +12,38 @@ use App\Http\Request;
 final class ServiceAuthenticator
 {
     /** @param array<string, string> $tokensByService */
-    public function __construct(private readonly array $tokensByService)
-    {
+    public function __construct(
+        private readonly array $tokensByService,
+        private readonly ?SignedRequestVerifier $signedRequestVerifier = null
+    ) {
     }
 
     public function authenticate(Request $request): ?AuthenticatedService
     {
         $service = trim($request->header('x-elonn-service'));
-        $token = $this->bearerToken($request->header('authorization')) ?? trim($request->header('x-elonn-service-token'));
-        if ($service === '' || $token === null) {
+        if ($service === '') {
             return null;
         }
 
         $memberId = trim($request->header('x-elonn-member-id'));
         if ($memberId !== '' && !$this->validMemberId($memberId)) {
+            return null;
+        }
+
+        if ($service === 'conductor.elonn' && $this->signedRequestVerifier instanceof SignedRequestVerifier) {
+            $signatureHeaders = [
+                'x-elonn-key-id' => $request->header('x-elonn-key-id'),
+                'x-elonn-timestamp' => $request->header('x-elonn-timestamp'),
+                'x-elonn-body-sha256' => $request->header('x-elonn-body-sha256'),
+                'x-elonn-signature' => $request->header('x-elonn-signature'),
+            ];
+            if ($this->signedRequestVerifier->verify($signatureHeaders, $request->method(), $request->path(), $request->body())) {
+                return new AuthenticatedService($service, $memberId === '' ? null : $memberId);
+            }
+        }
+
+        $token = $this->bearerToken($request->header('authorization')) ?? trim($request->header('x-elonn-service-token'));
+        if ($token === null) {
             return null;
         }
 
