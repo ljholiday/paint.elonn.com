@@ -345,7 +345,9 @@ final class DocumentStore
         if ($id === null) {
             return;
         }
-        if (preg_match('/^resource:[a-f0-9]{32}$/', $id) !== 1) {
+        $valid = preg_match('/^resource:[a-f0-9]{32}$/', $id) === 1
+            || preg_match('/^storage\.elonn:sha256:[a-f0-9]{64}$/', $id) === 1;
+        if (!$valid) {
             throw new InvalidArgumentException($label . ' is invalid.');
         }
     }

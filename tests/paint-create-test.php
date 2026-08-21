@@ -383,7 +383,8 @@ function paint_test_storage(array $config): ?StorageClient
 
 function is_resource_id(string $id): bool
 {
-    return preg_match('/^resource:[a-f0-9]{32}$/', $id) === 1;
+    return preg_match('/^resource:[a-f0-9]{32}$/', $id) === 1
+        || preg_match('/^storage\.elonn:sha256:[a-f0-9]{64}$/', $id) === 1;
 }
 
 /** @param array<string, mixed> $dataset @return array<int, string> */

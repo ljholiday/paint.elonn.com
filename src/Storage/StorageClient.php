@@ -284,6 +284,7 @@ final class StorageClient
 
     private function validResourceId(string $id): bool
     {
-        return preg_match('/^resource:[a-f0-9]{32}$/', $id) === 1;
+        return preg_match('/^resource:[a-f0-9]{32}$/', $id) === 1
+            || preg_match('/^storage\.elonn:sha256:[a-f0-9]{64}$/', $id) === 1;
     }
 }
