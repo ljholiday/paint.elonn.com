@@ -29,7 +29,13 @@ return [
     'service_auth' => [
         'mind.elonn' => paint_string_config('ELONN_MIND_SERVICE_TOKEN'),
         'admin.elonn' => paint_string_config('ELONN_ADMIN_SERVICE_TOKEN'),
-        'conductor_keys_url' => rtrim(paint_string_config('CONDUCTOR_SERVICE_KEYS_URL', 'https://conductor.elonn.local/.well-known/elonn-service-keys.json'), '/'),
+        'conductor_keys_url' => rtrim(
+            paint_string_config(
+                'CONDUCTOR_SERVICE_KEYS_URL',
+                paint_peer_url('conductor', $environment) . '/.well-known/elonn-service-keys.json'
+            ),
+            '/'
+        ),
     ],
 ];
 
@@ -66,6 +72,18 @@ function paint_service_url(string $key, string $environment, string $localDefaul
         : $productionDefault;
 
     return rtrim(paint_string_config($key, $default), '/');
+}
+
+/**
+ * Every Service on this platform follows one naming rule: <name>.elonn.local or <name>.elonn.com.
+ * A compliant peer's address is therefore always derivable from this Service's own environment
+ * classification -- never a separately hand-typed URL literal to keep in sync per Service.
+ */
+function paint_peer_url(string $peerName, string $environment): string
+{
+    $local = in_array(strtolower($environment), ['local', 'development', 'dev', 'testing'], true);
+
+    return 'https://' . $peerName . '.elonn.' . ($local ? 'local' : 'com');
 }
 
 function paint_database_name(string $environment, string $fallback): string
