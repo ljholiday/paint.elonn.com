@@ -24,11 +24,11 @@ return [
         'resource_url' => rtrim(paint_string_config('STORAGE_RESOURCE_URL', paint_service_url('STORAGE_BASE_URL', $environment, 'https://storage.elonn.local', 'https://storage.elonn.com') . '/resources'), '/'),
         'timeout_seconds' => paint_int_config('STORAGE_TIMEOUT_SECONDS', 8),
         'service_name' => paint_string_config('ELONN_STORAGE_SERVICE_CALLER', 'paint.elonn'),
-        'token' => paint_string_config('ELONN_STORAGE_SERVICE_TOKEN'),
+        'token' => paint_string_config('ELONN_PAINT_STORAGE_TOKEN'),
     ],
     'service_auth' => [
-        'mind.elonn' => paint_string_config('ELONN_MIND_SERVICE_TOKEN'),
-        'admin.elonn' => paint_string_config('ELONN_ADMIN_SERVICE_TOKEN'),
+        'mind.elonn' => paint_string_config('ELONN_MIND_PAINT_TOKEN'),
+        'admin.elonn' => paint_string_config('ELONN_ADMIN_PAINT_TOKEN'),
         'conductor_keys_url' => rtrim(
             paint_string_config(
                 'CONDUCTOR_SERVICE_KEYS_URL',
