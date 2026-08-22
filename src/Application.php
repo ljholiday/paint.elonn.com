@@ -89,6 +89,40 @@ final class Application
             ], $ready ? 200 : 500);
         });
 
+        $this->router->get('/metrics', function (Request $request): Response {
+            $startedAt = microtime(true);
+            $caller = $this->authenticatedService($request);
+            if ($caller === null || $caller->name !== 'admin.elonn') {
+                return Response::json([
+                    'errors' => [[
+                        'code' => 'paint.service_auth_failed',
+                        'class' => 'auth',
+                        'message' => 'Authenticated admin service request is required.',
+                    ]],
+                ], 401);
+            }
+
+            $database = 'error';
+            try {
+                $pdo = Database::pdo($this->config);
+                $pdo->query('SELECT 1');
+                $database = Database::schemaReady($pdo) ? 'connected' : 'schema_missing';
+            } catch (Throwable $throwable) {
+                error_log('[paint] /metrics database check failed: ' . $throwable->getMessage());
+            }
+
+            return Response::json([
+                'contract_version' => '1.0',
+                'service' => 'paint.elonn',
+                'status' => $database === 'connected' ? 'ok' : 'degraded',
+                'timestamp' => gmdate('Y-m-d\TH:i:s\Z'),
+                'response_time_ms' => round((microtime(true) - $startedAt) * 1000, 2),
+                'custom_metrics' => [
+                    'database' => $database,
+                ],
+            ]);
+        });
+
         $this->router->get('/', fn (): Response => Response::json([
             'service' => 'elonn_paint',
             'description' => 'Elonn Paint document service.',
