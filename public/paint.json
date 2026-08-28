@@ -6,8 +6,16 @@
     "purpose": "Owns Paint drawing document identity, records, operations, and lifecycle. Uses Storage for immutable Resource bytes; does not own Resource byte persistence, runtime presentation, World placement, or member authentication."
   },
   "contract": {
-    "revision": 1,
+    "revision": 2,
     "published": "2026-08-20T00:00:00Z"
+  },
+  "labels": {
+    "field.search_text": "Search",
+    "field.result_limit": "How many to show",
+    "field.paint_title": "Title",
+    "field.paint_width": "Width",
+    "field.paint_height": "Height",
+    "field.paint_stroke": "Stroke"
   },
   "invocation": {
     "base_url": "https://paint.elonn.com"
@@ -28,9 +36,9 @@
           "purpose": "Create a new Paint document for drawing after the member selects a Paint-owned creation action.",
           "model_selectable": true,
           "arguments": {
-            "title": {"type": "string", "required": false, "source": "model", "default": "Untitled Paint"},
-            "width": {"type": "integer", "required": false, "source": "model", "default": 1024},
-            "height": {"type": "integer", "required": false, "source": "model", "default": 768}
+            "title": {"type": "string", "required": false, "source": "model", "default": "Untitled Paint", "label_ref": "field.paint_title"},
+            "width": {"type": "integer", "required": false, "source": "model", "default": 1024, "label_ref": "field.paint_width"},
+            "height": {"type": "integer", "required": false, "source": "model", "default": 768, "label_ref": "field.paint_height"}
           }
         },
         {
@@ -38,8 +46,8 @@
           "purpose": "Search Paint-owned visual artwork results, including the drawing workspace for broad creation intent and the member's own documents by title or indexed drawing content.",
           "model_selectable": true,
           "arguments": {
-            "text": {"type": "string", "required": true, "source": "model"},
-            "limit": {"type": "integer", "required": false, "source": "model", "default": 10}
+            "text": {"type": "string", "required": true, "source": "model", "label_ref": "field.search_text"},
+            "limit": {"type": "integer", "required": false, "source": "model", "default": 10, "label_ref": "field.result_limit"}
           }
         },
         {
@@ -47,7 +55,7 @@
           "purpose": "Show recent Paint documents owned by the member.",
           "model_selectable": true,
           "arguments": {
-            "limit": {"type": "integer", "required": false, "source": "model", "default": 10}
+            "limit": {"type": "integer", "required": false, "source": "model", "default": 10, "label_ref": "field.result_limit"}
           }
         },
         {
@@ -64,7 +72,7 @@
           "model_selectable": false,
           "arguments": {
             "document_id": {"type": "string", "required": true, "source": "context", "context_key": "object_id"},
-            "stroke": {"type": "array", "required": true, "source": "model"}
+            "stroke": {"type": "array", "required": true, "source": "model", "label_ref": "field.paint_stroke"}
           }
         },
         {
@@ -73,7 +81,7 @@
           "model_selectable": false,
           "arguments": {
             "document_id": {"type": "string", "required": true, "source": "context", "context_key": "object_id"},
-            "title": {"type": "string", "required": true, "source": "model"}
+            "title": {"type": "string", "required": true, "source": "model", "label_ref": "field.paint_title"}
           }
         }
       ],

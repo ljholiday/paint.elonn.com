@@ -10,13 +10,29 @@ persistence, runtime presentation, World placement, or member authentication.
 
 - Service id: `paint.elonn`
 - Domain: `creative`
-- Revision: `1`
-- Published: `2026-08-20T00:00:00Z`
+- Revision: `2`
+- Published: `2026-08-27T00:00:00Z`
 - Canonical JSON: `https://paint.elonn.com/paint.json`
 - Service Publication: `https://paint.elonn.com/paint-publication.json`
 
 The canonical JSON contract is authoritative. This Markdown document describes the same Service contract
 for human readers.
+
+## Labels
+
+The contract carries a top-level `labels` pairs table — the display copy a generic consumer
+(the runtime form renderer, the reasoning Model, a Service Dashboard) shows for each argument.
+Argument schemas reference it by `label_ref`; a platform orchestrator resolves the refs to text
+before presenting a schema.
+
+| Ref | Text |
+| --- | --- |
+| `field.search_text` | Search |
+| `field.result_limit` | How many to show |
+| `field.paint_title` | Title |
+| `field.paint_width` | Width |
+| `field.paint_height` | Height |
+| `field.paint_stroke` | Stroke |
 
 ## Authentication
 
