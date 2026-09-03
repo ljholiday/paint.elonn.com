@@ -243,8 +243,8 @@ $checks = [
         && count($dataset['resources'] ?? []) === 2
         && count(source_document($dataset)['operations'] ?? []) === 0
         && str_starts_with((string) (preview_resource($dataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
-    'paint.create returns workspace placement and open Action' => count($dataset['placements'] ?? []) === 1
-        && ($dataset['placements'][0]['type'] ?? '') === 'workspace'
+    'paint.create opens the document on Carry with an open Action' => count($dataset['placements'] ?? []) === 1
+        && ($dataset['placements'][0]['type'] ?? '') === 'carry'
         && count($dataset['actions'] ?? []) === 1
         && ($dataset['actions'][0]['type'] ?? '') === 'open',
     'paint.create rejects invalid dimensions' => $invalidWidth instanceof InvalidArgumentException,

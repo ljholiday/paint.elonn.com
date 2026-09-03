@@ -370,9 +370,11 @@ final class PaintService
             'relationships' => [],
             'collections' => [],
             'resources' => $resourceObjects,
+            // paint.read / create / draw / rename open a single document: it is placed on Carry
+            // (an opened Object -- see dev.elonn canonical/layout.md).
             'placements' => [[
-                'id' => 'placement:' . $documentId . ':workspace',
-                'type' => 'workspace',
+                'id' => 'placement:' . $documentId . ':carry',
+                'type' => 'carry',
                 'content' => [
                     'object' => $documentId,
                 ],
@@ -395,16 +397,8 @@ final class PaintService
     {
         $objects = $this->matchesPaintWorkspace($text) ? [$this->paintWorkspaceObject()] : [];
         $actions = [];
-        $placements = [];
         if ($objects !== []) {
             $actions[] = $this->paintWorkspaceAction();
-            $placements[] = [
-                'id' => 'placement:paint.workspace:workspace',
-                'type' => 'workspace',
-                'content' => [
-                    'object' => 'paint.workspace',
-                ],
-            ];
         }
         foreach ($documents as $document) {
             $dataset = $this->dataset($document, $caller, $operation, []);
@@ -412,7 +406,6 @@ final class PaintService
             if (is_array($object)) {
                 $objects[] = $object;
                 $actions = array_merge($actions, $dataset['actions']);
-                $placements = array_merge($placements, $dataset['placements']);
             }
         }
 
@@ -434,13 +427,6 @@ final class PaintService
                     'count' => count($objects),
                 ],
             ];
-            $placements[] = [
-                'id' => 'placement:' . $collectionId . ':workspace',
-                'type' => 'workspace',
-                'content' => [
-                    'collection' => $collectionId,
-                ],
-            ];
         }
 
         return [
@@ -454,7 +440,8 @@ final class PaintService
             'relationships' => [],
             'collections' => $collections,
             'resources' => [],
-            'placements' => $placements,
+            // A search lists Paint documents as unplaced Findings; focusing one opens it.
+            'placements' => [],
             'errors' => [],
             'context' => [
                 'service' => 'paint',
