@@ -359,14 +359,11 @@ final class PaintService
                 ],
                 'resources' => $resources,
             ]],
-            'actions' => [[
-                'id' => 'action:' . $documentId . ':open',
-                'type' => 'open',
-                'target' => $documentId,
-                'content' => [
-                    'label' => 'Open',
-                ],
-            ]],
+            // No "open" action: paint.read/create/draw/rename place the document on Carry
+            // directly (the placement below), and a paint.search Finding is opened by
+            // focusing it (World runs world.focus). An Action with no operation_invocation
+            // is not a canonical Action (dev.elonn canonical/action.md).
+            'actions' => [],
             'relationships' => [],
             'collections' => [],
             'resources' => $resourceObjects,
