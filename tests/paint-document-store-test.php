@@ -35,7 +35,7 @@ final class PaintDocumentStoreTest
 
         try {
             try {
-                $store->create('', 'Sketch', 1024, 768, null, null, 'paint.test');
+                $store->create('', 'Sketch', 1024, 768, null, null, null, 'paint.test');
             } catch (InvalidArgumentException $exception) {
                 $this->pass('Owner validation rejected empty owner.');
                 return;
@@ -59,11 +59,13 @@ final class PaintDocumentStoreTest
         try {
             $source = 'resource:' . str_repeat('a', 32);
             $preview = 'resource:' . str_repeat('b', 32);
+            $graphics = 'resource:' . str_repeat('e', 32);
             $nextSource = 'resource:' . str_repeat('c', 32);
             $nextPreview = 'resource:' . str_repeat('d', 32);
-            $document = $store->create('42', '', 1024, 768, $source, $preview, 'paint.test');
+            $nextGraphics = 'resource:' . str_repeat('f', 32);
+            $document = $store->create('42', '', 1024, 768, $source, $preview, $graphics, 'paint.test');
             $found = $store->find($document['id']);
-            $updated = $store->updateResources($document['id'], $nextSource, $nextPreview);
+            $updated = $store->updateResources($document['id'], $nextSource, $nextPreview, $nextGraphics);
             $deleted = $store->delete($document['id']);
 
             if ($found !== null
@@ -75,8 +77,10 @@ final class PaintDocumentStoreTest
                 && $document['width'] === 1024
                 && $document['height'] === 768
                 && $found['source_resource_id'] === $source
+                && $found['graphics_resource_id'] === $graphics
                 && $updated['source_resource_id'] === $nextSource
                 && $updated['preview_resource_id'] === $nextPreview
+                && $updated['graphics_resource_id'] === $nextGraphics
                 && $store->find($document['id']) === null
             ) {
                 $this->pass('Paint document record kept stable identity and current Resource references.');

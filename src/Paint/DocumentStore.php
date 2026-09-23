@@ -24,6 +24,7 @@ final class DocumentStore
         int $height,
         ?string $sourceResourceId,
         ?string $previewResourceId,
+        ?string $graphicsResourceId,
         string $createdByService,
     ): array {
         $owner = $this->normalizeOwner($owner);
@@ -31,6 +32,7 @@ final class DocumentStore
         $this->validateDimensions($width, $height);
         $this->validateResourceId($sourceResourceId, 'Source Resource id');
         $this->validateResourceId($previewResourceId, 'Preview Resource id');
+        $this->validateResourceId($graphicsResourceId, 'Graphics Resource id');
         $createdByService = $this->normalizeService($createdByService);
 
         $now = gmdate('Y-m-d H:i:s');
@@ -42,6 +44,7 @@ final class DocumentStore
             'height' => $height,
             'source_resource_id' => $sourceResourceId,
             'preview_resource_id' => $previewResourceId,
+            'graphics_resource_id' => $graphicsResourceId,
             'created_by_service' => $createdByService,
             'created_at' => $now,
             'modified_at' => $now,
@@ -50,9 +53,9 @@ final class DocumentStore
 
         $stmt = $this->pdo->prepare(
             'INSERT INTO paint_documents
-                (id, owner, title, width, height, source_resource_id, preview_resource_id, created_by_service, created_at, modified_at, deleted_at)
+                (id, owner, title, width, height, source_resource_id, preview_resource_id, graphics_resource_id, created_by_service, created_at, modified_at, deleted_at)
              VALUES
-                (:id, :owner, :title, :width, :height, :source_resource_id, :preview_resource_id, :created_by_service, :created_at, :modified_at, :deleted_at)'
+                (:id, :owner, :title, :width, :height, :source_resource_id, :preview_resource_id, :graphics_resource_id, :created_by_service, :created_at, :modified_at, :deleted_at)'
         );
         $stmt->execute($row);
 
@@ -199,25 +202,28 @@ final class DocumentStore
     }
 
     /** @return array<string, mixed>|null */
-    public function updateResources(string $id, string $sourceResourceId, string $previewResourceId): ?array
+    public function updateResources(string $id, string $sourceResourceId, string $previewResourceId, string $graphicsResourceId): ?array
     {
         if (!$this->validDocumentId($id)) {
             return null;
         }
         $this->validateResourceId($sourceResourceId, 'Source Resource id');
         $this->validateResourceId($previewResourceId, 'Preview Resource id');
+        $this->validateResourceId($graphicsResourceId, 'Graphics Resource id');
 
         $now = gmdate('Y-m-d H:i:s');
         $stmt = $this->pdo->prepare(
             'UPDATE paint_documents
              SET source_resource_id = :source_resource_id,
                  preview_resource_id = :preview_resource_id,
+                 graphics_resource_id = :graphics_resource_id,
                  modified_at = :modified_at
              WHERE id = :id AND deleted_at IS NULL'
         );
         $stmt->execute([
             'source_resource_id' => $sourceResourceId,
             'preview_resource_id' => $previewResourceId,
+            'graphics_resource_id' => $graphicsResourceId,
             'modified_at' => $now,
             'id' => $id,
         ]);
@@ -282,6 +288,7 @@ final class DocumentStore
             'height' => (int) $row['height'],
             'source_resource_id' => $row['source_resource_id'] === null ? null : (string) $row['source_resource_id'],
             'preview_resource_id' => $row['preview_resource_id'] === null ? null : (string) $row['preview_resource_id'],
+            'graphics_resource_id' => ($row['graphics_resource_id'] ?? null) === null ? null : (string) $row['graphics_resource_id'],
             'created_by_service' => (string) $row['created_by_service'],
             'created_at' => $this->isoTime((string) $row['created_at']),
             'modified_at' => $this->isoTime((string) $row['modified_at']),

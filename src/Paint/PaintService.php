@@ -39,21 +39,26 @@ final class PaintService
             $height,
             null,
             null,
+            null,
             $caller->name
         );
 
         $source = null;
         $preview = null;
+        $graphics = null;
 
         try {
             $sourceBytes = SourceDocument::empty($width, $height);
             $previewBytes = PreviewImage::fromSource($sourceBytes);
+            $graphicsBytes = SvgProjection::fromSource($sourceBytes);
             $source = $this->storage->create(SourceDocument::MEDIA_TYPE, $sourceBytes, $caller->memberId);
             $preview = $this->storage->create('image/png', $previewBytes, $caller->memberId);
+            $graphics = $this->storage->create(SvgProjection::MEDIA_TYPE, $graphicsBytes, $caller->memberId);
             $updated = $this->documents->updateResources(
                 (string) $document['id'],
                 (string) $source['id'],
-                (string) $preview['id']
+                (string) $preview['id'],
+                (string) $graphics['id']
             );
             if ($updated === null) {
                 throw new RuntimeException('Paint document Resource links could not be saved.');
@@ -63,6 +68,7 @@ final class PaintService
             return $this->dataset($updated, $caller, 'paint.create', [
                 $this->sourceResourceObject($source, $sourceBytes),
                 $this->previewResourceObject($preview, $previewBytes),
+                $this->graphicsResourceObject($graphics, $graphicsBytes),
             ]);
         } catch (Throwable $throwable) {
             if (is_array($source ?? null)) {
@@ -70,6 +76,9 @@ final class PaintService
             }
             if (is_array($preview ?? null)) {
                 $this->storage->delete((string) ($preview['id'] ?? ''));
+            }
+            if (is_array($graphics ?? null)) {
+                $this->storage->delete((string) ($graphics['id'] ?? ''));
             }
             $this->documents->delete((string) $document['id']);
 
@@ -91,18 +100,22 @@ final class PaintService
 
         $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
         $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
-        if ($sourceResourceId === '' || $previewResourceId === '') {
+        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
+        if ($sourceResourceId === '' || $previewResourceId === '' || $graphicsResourceId === '') {
             throw new RuntimeException('Paint document Resource links are incomplete.');
         }
 
         $sourceBytes = $this->storage->content($sourceResourceId);
         $previewBytes = $this->storage->content($previewResourceId);
+        $graphicsBytes = $this->storage->content($graphicsResourceId);
         $source = $this->storage->metadata($sourceResourceId);
         $preview = $this->storage->metadata($previewResourceId);
+        $graphics = $this->storage->metadata($graphicsResourceId);
 
         return $this->dataset($document, $caller, 'paint.read', [
             $this->sourceResourceObject($source, $sourceBytes),
             $this->previewResourceObject($preview, $previewBytes),
+            $this->graphicsResourceObject($graphics, $graphicsBytes),
         ]);
     }
 
@@ -125,24 +138,29 @@ final class PaintService
 
         $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
         $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
-        if ($sourceResourceId === '' || $previewResourceId === '') {
+        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
+        if ($sourceResourceId === '' || $previewResourceId === '' || $graphicsResourceId === '') {
             throw new RuntimeException('Paint document Resource links are incomplete.');
         }
 
         $sourceBytes = $this->storage->content($sourceResourceId);
         $nextSourceBytes = SourceDocument::appendStroke($sourceBytes, $stroke);
         $nextPreviewBytes = PreviewImage::fromSource($nextSourceBytes);
+        $nextGraphicsBytes = SvgProjection::fromSource($nextSourceBytes);
         $source = null;
         $preview = null;
+        $graphics = null;
 
         try {
             $source = $this->storage->replace($sourceResourceId, SourceDocument::MEDIA_TYPE, $nextSourceBytes, $caller->memberId);
             $preview = $this->storage->replace($previewResourceId, 'image/png', $nextPreviewBytes, $caller->memberId);
+            $graphics = $this->storage->replace($graphicsResourceId, SvgProjection::MEDIA_TYPE, $nextGraphicsBytes, $caller->memberId);
 
             $updated = $this->documents->updateResources(
                 $documentId,
                 (string) $source['id'],
-                (string) $preview['id']
+                (string) $preview['id'],
+                (string) $graphics['id']
             );
             if ($updated === null) {
                 throw new RuntimeException('Paint document Resource links could not be saved.');
@@ -152,6 +170,7 @@ final class PaintService
             return $this->dataset($updated, $caller, 'paint.draw', [
                 $this->sourceResourceObject($source, $nextSourceBytes),
                 $this->previewResourceObject($preview, $nextPreviewBytes),
+                $this->graphicsResourceObject($graphics, $nextGraphicsBytes),
             ]);
         } catch (Throwable $throwable) {
             if (is_array($source ?? null)) {
@@ -159,6 +178,9 @@ final class PaintService
             }
             if (is_array($preview ?? null)) {
                 $this->storage->delete((string) ($preview['id'] ?? ''));
+            }
+            if (is_array($graphics ?? null)) {
+                $this->storage->delete((string) ($graphics['id'] ?? ''));
             }
 
             throw $throwable;
@@ -293,18 +315,22 @@ final class PaintService
     {
         $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
         $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
-        if ($sourceResourceId === '' || $previewResourceId === '') {
+        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
+        if ($sourceResourceId === '' || $previewResourceId === '' || $graphicsResourceId === '') {
             throw new RuntimeException('Paint document Resource links are incomplete.');
         }
 
         $sourceBytes = $this->storage->content($sourceResourceId);
         $previewBytes = $this->storage->content($previewResourceId);
+        $graphicsBytes = $this->storage->content($graphicsResourceId);
         $source = $this->storage->metadata($sourceResourceId);
         $preview = $this->storage->metadata($previewResourceId);
+        $graphics = $this->storage->metadata($graphicsResourceId);
 
         return $this->dataset($document, $caller, $operation, [
             $this->sourceResourceObject($source, $sourceBytes),
             $this->previewResourceObject($preview, $previewBytes),
+            $this->graphicsResourceObject($graphics, $graphicsBytes),
         ]);
     }
 
@@ -319,6 +345,7 @@ final class PaintService
         $resources = array_values(array_filter([
             $document['source_resource_id'] ?? null,
             $document['preview_resource_id'] ?? null,
+            $document['graphics_resource_id'] ?? null,
         ], 'is_string'));
 
         return [
@@ -339,6 +366,7 @@ final class PaintService
                     'height' => (int) $document['height'],
                     'source_resource' => $document['source_resource_id'] ?? null,
                     'preview_resource' => $document['preview_resource_id'] ?? null,
+                    'graphics_resource' => $document['graphics_resource_id'] ?? null,
                     'search' => [
                         'confidence' => $document['search_confidence'] ?? null,
                         'semantic_summary' => $document['semantic_summary'] ?? null,
@@ -354,16 +382,39 @@ final class PaintService
                 ],
                 'resources' => $resources,
             ]],
-            // No "open" action: paint.read/create/draw/rename place the document on Carry
-            // directly (the placement below), and a paint.search Finding is opened by
-            // focusing it (World runs world.focus). Draw and rename are real Actions, bare
-            // (no arguments declared here) -- Conductor attaches each operation's real
-            // argument schema from Paint's published Contract generically, the same way
-            // every other Service's operations are enriched. A Runtime renders the drawing
-            // surface and the rename field from that schema alone; it needs no Paint-specific
-            // code to know what these actions do (dev.elonn canonical/object.md, Recognized
-            // content format: drawing_surface).
+            // A real "open" action -- operation_invocation calling paint.read -- the same
+            // shape every other Service's Objects already carry (e.g. find.elonn's
+            // find.open). Reopening this document (from a paint.search Finding, which never
+            // carries this document's Resources) routes back through Paint for current state
+            // instead of World's free world.focus placement, which only reuses whatever the
+            // current Dataset happens to already hold. A Runtime already hides this action
+            // generically whenever it renders the Object it targets as already-open (it does
+            // the same for every other Service's open action) -- unconditionally including it
+            // here needs no Paint-specific suppression logic for create/read/draw/rename.
+            // Draw and rename are real Actions, bare (no arguments declared here) -- Conductor
+            // attaches each operation's real argument schema from Paint's published Contract
+            // generically, the same way every other Service's operations are enriched. A
+            // Runtime renders the drawing surface and the rename field from that schema alone;
+            // it needs no Paint-specific code to know what these actions do (dev.elonn
+            // canonical/object.md, Recognized content format: drawing_surface).
             'actions' => [
+                [
+                    'id' => 'action:' . $documentId . ':open',
+                    'type' => 'open_object',
+                    'target' => $documentId,
+                    'content' => [
+                        'label' => 'Open',
+                        'operation_invocation' => [
+                            'service' => 'paint',
+                            'operation' => 'paint.read',
+                            'object_id' => $documentId,
+                            'payload' => [],
+                        ],
+                        'availability' => [
+                            'state' => 'enabled',
+                        ],
+                    ],
+                ],
                 [
                     'id' => 'action:' . $documentId . ':draw',
                     'type' => 'operation',
@@ -633,6 +684,23 @@ final class PaintService
     {
         $object = $this->resourceObject($resource, 'drawing.preview', 'Drawing preview');
         $object['content']['data_url'] = 'data:image/png;base64,' . base64_encode($previewBytes);
+
+        return $object;
+    }
+
+    /**
+     * A `graphics.svg` Resource (dev.elonn canonical/svg-profile.md) — the rendered SVG
+     * projection of this document's Drawing Operations. A Runtime renders this markup
+     * directly; it does not reconstruct graphics semantics from `drawing.marks` itself
+     * (svg-profile.md, Ownership).
+     *
+     * @param array<string, mixed> $resource
+     * @return array<string, mixed>
+     */
+    private function graphicsResourceObject(array $resource, string $svgBytes): array
+    {
+        $object = $this->resourceObject($resource, 'graphics.svg', 'Drawing graphics');
+        $object['content']['svg'] = $svgBytes;
 
         return $object;
     }

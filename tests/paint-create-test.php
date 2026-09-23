@@ -43,6 +43,7 @@ $persisted = $store->find($createdDocumentId);
 $readDataset = $service->read(['document_id' => $createdDocumentId], new AuthenticatedService('mind.elonn', '99'));
 $originalSourceResource = (string) ($dataset['objects'][0]['content']['source_resource'] ?? '');
 $originalPreviewResource = (string) ($dataset['objects'][0]['content']['preview_resource'] ?? '');
+$originalGraphicsResource = (string) ($dataset['objects'][0]['content']['graphics_resource'] ?? '');
 $drawDataset = $service->draw([
     'document_id' => $createdDocumentId,
     'stroke' => [
@@ -57,6 +58,7 @@ $drawDataset = $service->draw([
 ], new AuthenticatedService('mind.elonn', '99'));
 $drawnSourceResource = (string) ($drawDataset['objects'][0]['content']['source_resource'] ?? '');
 $drawnPreviewResource = (string) ($drawDataset['objects'][0]['content']['preview_resource'] ?? '');
+$drawnGraphicsResource = (string) ($drawDataset['objects'][0]['content']['graphics_resource'] ?? '');
 $drawnSource = SourceDocument::decode($storage->content($drawnSourceResource));
 $drawnPreviewBytes = $storage->content($drawnPreviewResource);
 $drawPersisted = $store->find($createdDocumentId);
@@ -233,19 +235,25 @@ $checks = [
         && ($dataset['objects'][0]['content']['height'] ?? null) === 480
         && is_resource_id((string) ($dataset['objects'][0]['content']['source_resource'] ?? ''))
         && is_resource_id((string) ($dataset['objects'][0]['content']['preview_resource'] ?? ''))
+        && is_resource_id((string) ($dataset['objects'][0]['content']['graphics_resource'] ?? ''))
         && ($dataset['objects'][0]['content']['storage_state'] ?? '') === 'ready'
         && ($dataset['objects'][0]['content']['format'] ?? '') === 'drawing_surface'
-        && count($dataset['objects'][0]['resources'] ?? []) === 2
-        && count($dataset['resources'] ?? []) === 2
+        && count($dataset['objects'][0]['resources'] ?? []) === 3
+        && count($dataset['resources'] ?? []) === 3
         && count(source_document($dataset)['operations'] ?? []) === 0
-        && str_starts_with((string) (preview_resource($dataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
-    'paint.create opens the document on Carry via a carry Placement, no open Action, real draw/rename Actions' => count($dataset['placements'] ?? []) === 1
+        && str_starts_with((string) (preview_resource($dataset)['content']['data_url'] ?? ''), 'data:image/png;base64,')
+        && str_starts_with((string) (graphics_resource($dataset)['content']['svg'] ?? ''), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">')
+        && !str_contains((string) (graphics_resource($dataset)['content']['svg'] ?? ''), '<path'),
+    'paint.create opens the document on Carry via a carry Placement, with a real open Action plus draw/rename Actions' => count($dataset['placements'] ?? []) === 1
         && ($dataset['placements'][0]['type'] ?? '') === 'carry'
-        && count(array_values(array_filter($dataset['actions'] ?? [], static fn (array $action): bool => ($action['content']['operation_invocation']['operation'] ?? '') === 'open'))) === 0
-        && count($dataset['actions'] ?? []) === 2
+        && count($dataset['actions'] ?? []) === 3
+        && ($dataset['actions'][0]['type'] ?? '') === 'open_object'
         && ($dataset['actions'][0]['target'] ?? '') === $createdDocumentId
-        && ($dataset['actions'][0]['content']['operation_invocation']['operation'] ?? '') === 'paint.draw'
-        && ($dataset['actions'][1]['content']['operation_invocation']['operation'] ?? '') === 'paint.rename',
+        && ($dataset['actions'][0]['content']['operation_invocation']['operation'] ?? '') === 'paint.read'
+        && ($dataset['actions'][0]['content']['operation_invocation']['object_id'] ?? '') === $createdDocumentId
+        && ($dataset['actions'][1]['target'] ?? '') === $createdDocumentId
+        && ($dataset['actions'][1]['content']['operation_invocation']['operation'] ?? '') === 'paint.draw'
+        && ($dataset['actions'][2]['content']['operation_invocation']['operation'] ?? '') === 'paint.rename',
     'paint.create rejects invalid dimensions' => $invalidWidth instanceof InvalidArgumentException,
     'paint.read returns current paint.document and Resource metadata' => ($readDataset['context']['operation'] ?? '') === 'paint.read'
         && ($readDataset['objects'][0]['id'] ?? '') === $createdDocumentId
@@ -254,9 +262,11 @@ $checks = [
         && ($readDataset['objects'][0]['content']['format'] ?? '') === 'drawing_surface'
         && ($readDataset['objects'][0]['content']['source_resource'] ?? '') === ($dataset['objects'][0]['content']['source_resource'] ?? null)
         && ($readDataset['objects'][0]['content']['preview_resource'] ?? '') === ($dataset['objects'][0]['content']['preview_resource'] ?? null)
-        && count($readDataset['resources'] ?? []) === 2
+        && ($readDataset['objects'][0]['content']['graphics_resource'] ?? '') === ($dataset['objects'][0]['content']['graphics_resource'] ?? null)
+        && count($readDataset['resources'] ?? []) === 3
         && count(source_document($readDataset)['operations'] ?? []) === 0
-        && str_starts_with((string) (preview_resource($readDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
+        && str_starts_with((string) (preview_resource($readDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,')
+        && (graphics_resource($readDataset)['content']['svg'] ?? '') === (graphics_resource($dataset)['content']['svg'] ?? ''),
     'paint.read rejects invalid document ids' => $invalidRead instanceof InvalidArgumentException,
     'paint.read reports missing documents' => $missingRead instanceof DocumentNotFoundException,
     'paint.draw appends one stroke to replacement source Resource' => ($drawDataset['context']['operation'] ?? '') === 'paint.draw'
@@ -265,8 +275,11 @@ $checks = [
         && $drawnSourceResource !== $originalSourceResource
         && is_resource_id($drawnPreviewResource)
         && $drawnPreviewResource !== $originalPreviewResource
+        && is_resource_id($drawnGraphicsResource)
+        && $drawnGraphicsResource !== $originalGraphicsResource
         && ($drawPersisted['source_resource_id'] ?? '') === $drawnSourceResource
         && ($drawPersisted['preview_resource_id'] ?? '') === $drawnPreviewResource
+        && ($drawPersisted['graphics_resource_id'] ?? '') === $drawnGraphicsResource
         && count($drawnSource['operations']) === 1
         && ($drawnSource['operations'][0]['type'] ?? '') === 'stroke'
         && ($drawnSource['operations'][0]['tool'] ?? '') === 'pencil'
@@ -275,7 +288,14 @@ $checks = [
         && count($drawnSource['operations'][0]['geometry']['points'] ?? []) === 2
         && count(source_document($drawDataset)['operations'] ?? []) === 1
         && str_starts_with($drawnPreviewBytes, "\x89PNG\r\n\x1a\n")
-        && str_starts_with((string) (preview_resource($drawDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
+        && str_starts_with((string) (preview_resource($drawDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,')
+        && substr_count((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), '<path') === 1
+        && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'd="M10.00,20.00 L30.00,40.00"')
+        && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'stroke="#336699"')
+        && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'stroke-width="6.00"')
+        && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'stroke-linecap="round"')
+        && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'stroke-linejoin="round"')
+        && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'fill="none"'),
     'paint.draw rejects incomplete strokes' => $invalidDraw instanceof InvalidArgumentException,
     'paint.rename updates document title without replacing Resources' => ($renameDataset['context']['operation'] ?? '') === 'paint.rename'
         && ($renameDataset['objects'][0]['id'] ?? '') === $createdDocumentId
@@ -283,9 +303,11 @@ $checks = [
         && ($renameDataset['objects'][0]['content']['name'] ?? '') === 'Named Sketch'
         && ($renameDataset['objects'][0]['content']['source_resource'] ?? '') === $drawnSourceResource
         && ($renameDataset['objects'][0]['content']['preview_resource'] ?? '') === $drawnPreviewResource
+        && ($renameDataset['objects'][0]['content']['graphics_resource'] ?? '') === $drawnGraphicsResource
         && ($renamedPersisted['title'] ?? '') === 'Named Sketch'
         && count(source_document($renameDataset)['operations'] ?? []) === 1
-        && str_starts_with((string) (preview_resource($renameDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
+        && str_starts_with((string) (preview_resource($renameDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,')
+        && substr_count((string) (graphics_resource($renameDataset)['content']['svg'] ?? ''), '<path') === 1,
     'paint.rename rejects invalid titles and missing documents' => $invalidRename instanceof InvalidArgumentException
         && $missingTitleRename instanceof InvalidArgumentException
         && $missingRename instanceof DocumentNotFoundException,
@@ -311,12 +333,13 @@ $checks = [
     'POST /paint/call routes paint.read through DocumentStore' => ($routeRead['status'] ?? 0) === 200
         && ($routeRead['json']['context']['operation'] ?? '') === 'paint.read'
         && ($routeRead['json']['objects'][0]['id'] ?? '') === $routeDocumentId
-        && count($routeRead['json']['resources'] ?? []) === 2,
+        && count($routeRead['json']['resources'] ?? []) === 3,
     'POST /paint/call routes paint.draw through DocumentStore' => ($routeDraw['status'] ?? 0) === 200
         && ($routeDraw['json']['context']['operation'] ?? '') === 'paint.draw'
         && ($routeDraw['json']['objects'][0]['id'] ?? '') === $routeDocumentId
         && ($routeDraw['json']['objects'][0]['content']['source_resource'] ?? '') !== ($route['json']['objects'][0]['content']['source_resource'] ?? '')
-        && ($routeDraw['json']['objects'][0]['content']['preview_resource'] ?? '') !== ($route['json']['objects'][0]['content']['preview_resource'] ?? ''),
+        && ($routeDraw['json']['objects'][0]['content']['preview_resource'] ?? '') !== ($route['json']['objects'][0]['content']['preview_resource'] ?? '')
+        && ($routeDraw['json']['objects'][0]['content']['graphics_resource'] ?? '') !== ($route['json']['objects'][0]['content']['graphics_resource'] ?? ''),
     'POST /paint/call routes paint.rename through DocumentStore' => ($routeRename['status'] ?? 0) === 200
         && ($routeRename['json']['context']['operation'] ?? '') === 'paint.rename'
         && ($routeRename['json']['objects'][0]['id'] ?? '') === $routeDocumentId
@@ -428,6 +451,18 @@ function preview_resource(array $dataset): array
 {
     foreach (($dataset['resources'] ?? []) as $resource) {
         if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'drawing.preview')) {
+            return $resource;
+        }
+    }
+
+    return [];
+}
+
+/** @param array<string, mixed> $dataset @return array<string, mixed> */
+function graphics_resource(array $dataset): array
+{
+    foreach (($dataset['resources'] ?? []) as $resource) {
+        if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'graphics.svg')) {
             return $resource;
         }
     }
