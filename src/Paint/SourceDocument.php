@@ -12,12 +12,12 @@ use RuntimeException;
  */
 final class SourceDocument
 {
-    public const MEDIA_TYPE = 'application/vnd.elonn.paint+json';
+    public const MEDIA_TYPE = 'application/vnd.elonn.drawing+json';
 
     public static function empty(int $width, int $height): string
     {
         $encoded = json_encode([
-            'type' => 'paint.source',
+            'type' => 'drawing.marks',
             'width' => $width,
             'height' => $height,
             'operations' => [],
@@ -51,11 +51,11 @@ final class SourceDocument
             throw new RuntimeException('Paint source document is not valid JSON.');
         }
 
-        $type = $decoded['type'] ?? 'paint.source';
+        $type = $decoded['type'] ?? 'drawing.marks';
         $width = $decoded['width'] ?? null;
         $height = $decoded['height'] ?? null;
         $operations = $decoded['operations'] ?? null;
-        if ($type !== 'paint.source' || !is_int($width) || !is_int($height) || !is_array($operations)) {
+        if ($type !== 'drawing.marks' || !is_int($width) || !is_int($height) || !is_array($operations)) {
             throw new RuntimeException('Paint source document is not canonical.');
         }
 
@@ -66,7 +66,7 @@ final class SourceDocument
         }
 
         return [
-            'type' => 'paint.source',
+            'type' => 'drawing.marks',
             'width' => $width,
             'height' => $height,
             'operations' => array_values($operations),
@@ -117,7 +117,7 @@ final class SourceDocument
         }
 
         return [
-            'id' => 'paint.operation:' . bin2hex(random_bytes(16)),
+            'id' => 'drawing.operation:' . bin2hex(random_bytes(16)),
             'type' => 'stroke',
             'created' => gmdate('c'),
             'tool' => $tool,

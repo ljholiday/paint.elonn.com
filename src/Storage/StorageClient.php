@@ -179,7 +179,7 @@ final class StorageClient
         }
 
         $response = $this->request('GET', $this->resourceUrl . '/' . rawurlencode($resourceId) . '/content', array_merge($this->identity->headers(), [
-            'Accept: application/vnd.elonn.paint+json',
+            'Accept: application/vnd.elonn.drawing+json',
         ]), '');
 
         if ($response['status'] < 200 || $response['status'] >= 300) {

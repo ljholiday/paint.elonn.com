@@ -6,8 +6,8 @@
     "purpose": "Owns Paint drawing document identity, records, operations, and lifecycle. Uses Storage for immutable Resource bytes; does not own Resource byte persistence, runtime presentation, World placement, or member authentication."
   },
   "contract": {
-    "revision": 2,
-    "published": "2026-08-20T00:00:00Z"
+    "revision": 3,
+    "published": "2026-09-22T00:00:00Z"
   },
   "labels": {
     "field.search_text": "Search",
@@ -72,7 +72,7 @@
           "model_selectable": false,
           "arguments": {
             "document_id": {"type": "string", "required": true, "source": "context", "context_key": "object_id"},
-            "stroke": {"type": "array", "required": true, "source": "model", "label_ref": "field.paint_stroke"}
+            "stroke": {"type": "drawing_operation", "required": true, "source": "model", "label_ref": "field.paint_stroke"}
           }
         },
         {

@@ -10,8 +10,8 @@ persistence, runtime presentation, World placement, or member authentication.
 
 - Service id: `paint.elonn`
 - Domain: `creative`
-- Revision: `2`
-- Published: `2026-08-27T00:00:00Z`
+- Revision: `3`
+- Published: `2026-09-22T00:00:00Z`
 - Canonical JSON: `https://paint.elonn.com/paint.json`
 - Service Publication: `https://paint.elonn.com/paint-publication.json`
 
@@ -116,10 +116,10 @@ supplies `document_id`.
 Add a completed drawing stroke to an existing Paint document already identified by a prior Dataset action's
 `object_id`.
 
-| argument | required | source |
-|---|---|---|
-| `document_id` | yes | context (`object_id`) |
-| `stroke` | yes | model |
+| argument | required | source | type |
+|---|---|---|---|
+| `document_id` | yes | context (`object_id`) | `string` |
+| `stroke` | yes | model | `drawing_operation` — a Runtime renders this as a live drawing surface over the document's existing marks (see `dev.elonn.local` canonical `drawing-operation.md`), not a text field |
 
 ### `paint.rename` — not Model-selectable
 

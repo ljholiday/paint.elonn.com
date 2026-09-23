@@ -347,23 +347,58 @@ final class PaintService
                         'indexed_at' => $document['indexed_at'] ?? null,
                     ],
                     'storage_state' => $resources === [] ? 'pending_resources' : 'ready',
-                    'surface' => [
-                        'mode' => 'hosted',
-                        'service' => 'paint',
-                        'kind' => 'editor',
-                        'resources' => [
-                            'source' => $document['source_resource_id'] ?? null,
-                            'preview' => $document['preview_resource_id'] ?? null,
-                        ],
-                    ],
+                    // Service-neutral presentation hint (dev.elonn canonical/object.md,
+                    // Recognized content format: drawing_surface) -- a Runtime renders this
+                    // generically for any Service's drawing surface, not just Paint's.
+                    'format' => 'drawing_surface',
                 ],
                 'resources' => $resources,
             ]],
             // No "open" action: paint.read/create/draw/rename place the document on Carry
             // directly (the placement below), and a paint.search Finding is opened by
-            // focusing it (World runs world.focus). An Action with no operation_invocation
-            // is not a canonical Action (dev.elonn canonical/action.md).
-            'actions' => [],
+            // focusing it (World runs world.focus). Draw and rename are real Actions, bare
+            // (no arguments declared here) -- Conductor attaches each operation's real
+            // argument schema from Paint's published Contract generically, the same way
+            // every other Service's operations are enriched. A Runtime renders the drawing
+            // surface and the rename field from that schema alone; it needs no Paint-specific
+            // code to know what these actions do (dev.elonn canonical/object.md, Recognized
+            // content format: drawing_surface).
+            'actions' => [
+                [
+                    'id' => 'action:' . $documentId . ':draw',
+                    'type' => 'operation',
+                    'target' => $documentId,
+                    'content' => [
+                        'label' => 'Draw',
+                        'operation_invocation' => [
+                            'service' => 'paint',
+                            'operation' => 'paint.draw',
+                            'object_id' => $documentId,
+                            'payload' => [],
+                        ],
+                        'availability' => [
+                            'state' => 'enabled',
+                        ],
+                    ],
+                ],
+                [
+                    'id' => 'action:' . $documentId . ':rename',
+                    'type' => 'operation',
+                    'target' => $documentId,
+                    'content' => [
+                        'label' => 'Rename',
+                        'operation_invocation' => [
+                            'service' => 'paint',
+                            'operation' => 'paint.rename',
+                            'object_id' => $documentId,
+                            'payload' => [],
+                        ],
+                        'availability' => [
+                            'state' => 'enabled',
+                        ],
+                    ],
+                ],
+            ],
             'relationships' => [],
             'collections' => [],
             'resources' => $resourceObjects,
@@ -587,7 +622,7 @@ final class PaintService
     /** @param array<string, mixed> $resource @return array<string, mixed> */
     private function sourceResourceObject(array $resource, string $sourceBytes): array
     {
-        $object = $this->resourceObject($resource, 'paint.source', 'Paint source');
+        $object = $this->resourceObject($resource, 'drawing.marks', 'Drawing marks');
         $object['content']['source'] = SourceDocument::decode($sourceBytes);
 
         return $object;
@@ -596,7 +631,7 @@ final class PaintService
     /** @param array<string, mixed> $resource @return array<string, mixed> */
     private function previewResourceObject(array $resource, string $previewBytes): array
     {
-        $object = $this->resourceObject($resource, 'paint.preview', 'Paint preview');
+        $object = $this->resourceObject($resource, 'drawing.preview', 'Drawing preview');
         $object['content']['data_url'] = 'data:image/png;base64,' . base64_encode($previewBytes);
 
         return $object;

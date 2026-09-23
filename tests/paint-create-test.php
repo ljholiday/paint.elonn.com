@@ -234,27 +234,26 @@ $checks = [
         && is_resource_id((string) ($dataset['objects'][0]['content']['source_resource'] ?? ''))
         && is_resource_id((string) ($dataset['objects'][0]['content']['preview_resource'] ?? ''))
         && ($dataset['objects'][0]['content']['storage_state'] ?? '') === 'ready'
-        && ($dataset['objects'][0]['content']['surface']['mode'] ?? '') === 'hosted'
-        && ($dataset['objects'][0]['content']['surface']['service'] ?? '') === 'paint'
-        && ($dataset['objects'][0]['content']['surface']['kind'] ?? '') === 'editor'
-        && is_resource_id((string) ($dataset['objects'][0]['content']['surface']['resources']['source'] ?? ''))
-        && is_resource_id((string) ($dataset['objects'][0]['content']['surface']['resources']['preview'] ?? ''))
+        && ($dataset['objects'][0]['content']['format'] ?? '') === 'drawing_surface'
         && count($dataset['objects'][0]['resources'] ?? []) === 2
         && count($dataset['resources'] ?? []) === 2
         && count(source_document($dataset)['operations'] ?? []) === 0
         && str_starts_with((string) (preview_resource($dataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
-    'paint.create opens the document on Carry via a carry Placement, no open Action' => count($dataset['placements'] ?? []) === 1
+    'paint.create opens the document on Carry via a carry Placement, no open Action, real draw/rename Actions' => count($dataset['placements'] ?? []) === 1
         && ($dataset['placements'][0]['type'] ?? '') === 'carry'
-        && count($dataset['actions'] ?? []) === 0,
+        && count(array_values(array_filter($dataset['actions'] ?? [], static fn (array $action): bool => ($action['content']['operation_invocation']['operation'] ?? '') === 'open'))) === 0
+        && count($dataset['actions'] ?? []) === 2
+        && ($dataset['actions'][0]['target'] ?? '') === $createdDocumentId
+        && ($dataset['actions'][0]['content']['operation_invocation']['operation'] ?? '') === 'paint.draw'
+        && ($dataset['actions'][1]['content']['operation_invocation']['operation'] ?? '') === 'paint.rename',
     'paint.create rejects invalid dimensions' => $invalidWidth instanceof InvalidArgumentException,
     'paint.read returns current paint.document and Resource metadata' => ($readDataset['context']['operation'] ?? '') === 'paint.read'
         && ($readDataset['objects'][0]['id'] ?? '') === $createdDocumentId
         && ($readDataset['objects'][0]['type'] ?? '') === 'paint.document'
         && ($readDataset['objects'][0]['content']['storage_state'] ?? '') === 'ready'
-        && ($readDataset['objects'][0]['content']['surface']['mode'] ?? '') === 'hosted'
-        && ($readDataset['objects'][0]['content']['surface']['service'] ?? '') === 'paint'
-        && ($readDataset['objects'][0]['content']['surface']['resources']['source'] ?? '') === ($dataset['objects'][0]['content']['source_resource'] ?? null)
-        && ($readDataset['objects'][0]['content']['surface']['resources']['preview'] ?? '') === ($dataset['objects'][0]['content']['preview_resource'] ?? null)
+        && ($readDataset['objects'][0]['content']['format'] ?? '') === 'drawing_surface'
+        && ($readDataset['objects'][0]['content']['source_resource'] ?? '') === ($dataset['objects'][0]['content']['source_resource'] ?? null)
+        && ($readDataset['objects'][0]['content']['preview_resource'] ?? '') === ($dataset['objects'][0]['content']['preview_resource'] ?? null)
         && count($readDataset['resources'] ?? []) === 2
         && count(source_document($readDataset)['operations'] ?? []) === 0
         && str_starts_with((string) (preview_resource($readDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,'),
@@ -416,7 +415,7 @@ function object_ids(array $dataset): array
 function source_document(array $dataset): array
 {
     foreach (($dataset['resources'] ?? []) as $resource) {
-        if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'paint.source') && is_array($resource['content']['source'] ?? null)) {
+        if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'drawing.marks') && is_array($resource['content']['source'] ?? null)) {
             return $resource['content']['source'];
         }
     }
@@ -428,7 +427,7 @@ function source_document(array $dataset): array
 function preview_resource(array $dataset): array
 {
     foreach (($dataset['resources'] ?? []) as $resource) {
-        if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'paint.preview')) {
+        if (is_array($resource) && (($resource['content']['kind'] ?? '') === 'drawing.preview')) {
             return $resource;
         }
     }
