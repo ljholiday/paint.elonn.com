@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 /*
- * One-time data migration: rewrites every paint_documents row whose stored `drawing.marks`
+ * One-time backfill: rewrites every paint_documents row whose stored `drawing.marks`
  * Resource still carries the pre-rename internal type marker ("paint.source", from before
- * that marker was renamed to "drawing.marks") into the current canonical shape.
+ * that marker was renamed to "drawing.marks") into the current canonical shape. Not a schema
+ * migration -- this rewrites Storage Resource bytes and DocumentStore rows via the application's
+ * own classes, which the SQL-only migrations/ + migrate.php system can't do (see
+ * api.elonn.local/scripts/backfill_profiles_from_social.php for the same shape used elsewhere
+ * in this workspace).
  *
  * SourceDocument::decode() intentionally stays strict (requires type === 'drawing.marks') --
  * the fix for a legacy document is to migrate its data once, not to make the live service
@@ -17,7 +21,7 @@ declare(strict_types=1);
  * store that as a new Resource (StorageClient::replace, the same immutable-replace path
  * paint.draw already uses), and point the document row at the new Resource id.
  *
- * Usage: php scripts/migrate_legacy_source_type.php [--dry-run]
+ * Usage: php scripts/backfill_legacy_source_type.php [--dry-run]
  */
 
 use App\Paint\Database;
