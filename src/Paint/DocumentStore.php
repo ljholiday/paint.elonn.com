@@ -202,7 +202,7 @@ final class DocumentStore
     }
 
     /** @return array<string, mixed>|null */
-    public function updateResources(string $id, string $sourceResourceId, string $previewResourceId, string $graphicsResourceId): ?array
+    public function updateResources(string $id, string $sourceResourceId, string $previewResourceId, ?string $graphicsResourceId): ?array
     {
         if (!$this->validDocumentId($id)) {
             return null;
