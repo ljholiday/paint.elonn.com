@@ -100,17 +100,15 @@ final class PaintService
 
         $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
         $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
-        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
-        if ($sourceResourceId === '' || $previewResourceId === '' || $graphicsResourceId === '') {
+        if ($sourceResourceId === '' || $previewResourceId === '') {
             throw new RuntimeException('Paint document Resource links are incomplete.');
         }
 
         $sourceBytes = $this->storage->content($sourceResourceId);
         $previewBytes = $this->storage->content($previewResourceId);
-        $graphicsBytes = $this->storage->content($graphicsResourceId);
         $source = $this->storage->metadata($sourceResourceId);
         $preview = $this->storage->metadata($previewResourceId);
-        $graphics = $this->storage->metadata($graphicsResourceId);
+        [$graphics, $graphicsBytes, $document] = $this->ensureGraphicsResource($document, $sourceBytes, $caller->memberId);
 
         return $this->dataset($document, $caller, 'paint.read', [
             $this->sourceResourceObject($source, $sourceBytes),
@@ -138,10 +136,13 @@ final class PaintService
 
         $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
         $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
-        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
-        if ($sourceResourceId === '' || $previewResourceId === '' || $graphicsResourceId === '') {
+        if ($sourceResourceId === '' || $previewResourceId === '') {
             throw new RuntimeException('Paint document Resource links are incomplete.');
         }
+        // A document drawn on before the SVG Profile projection existed has no
+        // graphics_resource_id yet -- create its first one here rather than requiring it to
+        // already exist (see ensureGraphicsResource for the read-path equivalent).
+        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
 
         $sourceBytes = $this->storage->content($sourceResourceId);
         $nextSourceBytes = SourceDocument::appendStroke($sourceBytes, $stroke);
@@ -154,7 +155,9 @@ final class PaintService
         try {
             $source = $this->storage->replace($sourceResourceId, SourceDocument::MEDIA_TYPE, $nextSourceBytes, $caller->memberId);
             $preview = $this->storage->replace($previewResourceId, 'image/png', $nextPreviewBytes, $caller->memberId);
-            $graphics = $this->storage->replace($graphicsResourceId, SvgProjection::MEDIA_TYPE, $nextGraphicsBytes, $caller->memberId);
+            $graphics = $graphicsResourceId !== ''
+                ? $this->storage->replace($graphicsResourceId, SvgProjection::MEDIA_TYPE, $nextGraphicsBytes, $caller->memberId)
+                : $this->storage->create(SvgProjection::MEDIA_TYPE, $nextGraphicsBytes, $caller->memberId);
 
             $updated = $this->documents->updateResources(
                 $documentId,
@@ -315,23 +318,53 @@ final class PaintService
     {
         $sourceResourceId = (string) ($document['source_resource_id'] ?? '');
         $previewResourceId = (string) ($document['preview_resource_id'] ?? '');
-        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
-        if ($sourceResourceId === '' || $previewResourceId === '' || $graphicsResourceId === '') {
+        if ($sourceResourceId === '' || $previewResourceId === '') {
             throw new RuntimeException('Paint document Resource links are incomplete.');
         }
 
         $sourceBytes = $this->storage->content($sourceResourceId);
         $previewBytes = $this->storage->content($previewResourceId);
-        $graphicsBytes = $this->storage->content($graphicsResourceId);
         $source = $this->storage->metadata($sourceResourceId);
         $preview = $this->storage->metadata($previewResourceId);
-        $graphics = $this->storage->metadata($graphicsResourceId);
+        [$graphics, $graphicsBytes, $document] = $this->ensureGraphicsResource($document, $sourceBytes, $caller->memberId);
 
         return $this->dataset($document, $caller, $operation, [
             $this->sourceResourceObject($source, $sourceBytes),
             $this->previewResourceObject($preview, $previewBytes),
             $this->graphicsResourceObject($graphics, $graphicsBytes),
         ]);
+    }
+
+    /**
+     * A document read or renamed before the SVG Profile projection existed has no
+     * graphics_resource_id yet -- not a broken document, just one that predates the field.
+     * Generates and persists its first graphics.svg Resource here, the first time it's
+     * touched again, instead of treating the missing id as an error forever. Mirrors draw()'s
+     * own create-vs-replace branch for the same case.
+     *
+     * @param array<string, mixed> $document
+     * @return array{0: array<string, mixed>, 1: string, 2: array<string, mixed>}
+     */
+    private function ensureGraphicsResource(array $document, string $sourceBytes, ?string $memberId): array
+    {
+        $graphicsResourceId = (string) ($document['graphics_resource_id'] ?? '');
+        if ($graphicsResourceId !== '') {
+            return [$this->storage->metadata($graphicsResourceId), $this->storage->content($graphicsResourceId), $document];
+        }
+
+        $graphicsBytes = SvgProjection::fromSource($sourceBytes);
+        $graphics = $this->storage->create(SvgProjection::MEDIA_TYPE, $graphicsBytes, $memberId);
+        $updated = $this->documents->updateResources(
+            (string) $document['id'],
+            (string) $document['source_resource_id'],
+            (string) $document['preview_resource_id'],
+            (string) $graphics['id']
+        );
+        if ($updated === null) {
+            throw new RuntimeException('Paint document Resource links could not be saved.');
+        }
+
+        return [$graphics, $graphicsBytes, $updated];
     }
 
     /**

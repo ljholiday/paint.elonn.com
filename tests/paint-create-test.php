@@ -128,6 +128,26 @@ try {
     $invalidDraw = $exception;
 }
 
+// A document created before the SVG Profile projection existed has graphics_resource_id
+// NULL in the database (there is no code path that ever produces one otherwise) -- simulate
+// that directly rather than asserting on a document this test suite itself always creates
+// with one already set.
+$legacyReadDataset = $service->create(['title' => 'Legacy read'], new AuthenticatedService('mind.elonn', '99'));
+$legacyReadDocumentId = (string) ($legacyReadDataset['objects'][0]['id'] ?? '');
+$pdo->prepare('UPDATE paint_documents SET graphics_resource_id = NULL WHERE id = :id')->execute(['id' => $legacyReadDocumentId]);
+$legacyBeforeRead = $store->find($legacyReadDocumentId);
+$legacyReadResult = $service->read(['document_id' => $legacyReadDocumentId], new AuthenticatedService('mind.elonn', '99'));
+$legacyAfterRead = $store->find($legacyReadDocumentId);
+
+$legacyDrawDataset = $service->create(['title' => 'Legacy draw'], new AuthenticatedService('mind.elonn', '99'));
+$legacyDrawDocumentId = (string) ($legacyDrawDataset['objects'][0]['id'] ?? '');
+$pdo->prepare('UPDATE paint_documents SET graphics_resource_id = NULL WHERE id = :id')->execute(['id' => $legacyDrawDocumentId]);
+$legacyDrawResult = $service->draw([
+    'document_id' => $legacyDrawDocumentId,
+    'stroke' => ['tool' => 'pencil', 'color' => '#00ff00', 'width' => 2, 'points' => [['x' => 1, 'y' => 1], ['x' => 2, 'y' => 2]]],
+], new AuthenticatedService('mind.elonn', '99'));
+$legacyAfterDraw = $store->find($legacyDrawDocumentId);
+
 $app = new Application($config);
 $route = json_response($app, 'POST', '/paint/call', service_headers($config), [
     'content' => [
@@ -217,7 +237,11 @@ $createdResourceIds = array_merge(
     resource_ids($route['json']),
     resource_ids($routeRead['json']),
     resource_ids($routeDraw['json']),
-    resource_ids($routeRename['json'])
+    resource_ids($routeRename['json']),
+    resource_ids($legacyReadDataset),
+    resource_ids($legacyReadResult),
+    resource_ids($legacyDrawDataset),
+    resource_ids($legacyDrawResult)
 );
 
 $checks = [
@@ -297,6 +321,15 @@ $checks = [
         && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'stroke-linejoin="round"')
         && str_contains((string) (graphics_resource($drawDataset)['content']['svg'] ?? ''), 'fill="none"'),
     'paint.draw rejects incomplete strokes' => $invalidDraw instanceof InvalidArgumentException,
+    'paint.read backfills graphics_resource_id for a document that predates it' => $legacyBeforeRead['graphics_resource_id'] === null
+        && is_resource_id((string) ($legacyReadResult['objects'][0]['content']['graphics_resource'] ?? ''))
+        && $legacyAfterRead['graphics_resource_id'] !== null
+        && $legacyAfterRead['graphics_resource_id'] === $legacyReadResult['objects'][0]['content']['graphics_resource']
+        && str_starts_with((string) (graphics_resource($legacyReadResult)['content']['svg'] ?? ''), '<svg')
+        && $legacyAfterRead['source_resource_id'] === $legacyBeforeRead['source_resource_id'],
+    'paint.draw backfills graphics_resource_id for a document that predates it' => is_resource_id((string) ($legacyDrawResult['objects'][0]['content']['graphics_resource'] ?? ''))
+        && $legacyAfterDraw['graphics_resource_id'] !== null
+        && substr_count((string) (graphics_resource($legacyDrawResult)['content']['svg'] ?? ''), '<path') === 1,
     'paint.rename updates document title without replacing Resources' => ($renameDataset['context']['operation'] ?? '') === 'paint.rename'
         && ($renameDataset['objects'][0]['id'] ?? '') === $createdDocumentId
         && ($renameDataset['objects'][0]['title'] ?? '') === 'Named Sketch'
