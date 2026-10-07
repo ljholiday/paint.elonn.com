@@ -123,6 +123,77 @@ final class Application
             ]);
         });
 
+        $this->router->get('/administrative-interface', function (Request $request): Response {
+            // canonical/administrative-interface.json: Paint's own administrative status and
+            // capability baseline, for Admin's observation only. configuration.mutable,
+            // diagnostics, and control.{restart,drain} are honestly reported as unavailable --
+            // Paint implements none of them yet.
+            $caller = $this->authenticatedService($request);
+            if ($caller === null || $caller->name !== 'admin.elonn') {
+                return Response::json([
+                    'errors' => [[
+                        'code' => 'paint.service_auth_failed',
+                        'class' => 'auth',
+                        'message' => 'Authenticated admin service request is required.',
+                    ]],
+                ], 401);
+            }
+
+            $storage = (array) ($this->config['storage_service'] ?? []);
+            $checks = [];
+            $healthy = true;
+
+            try {
+                $pdo = Database::pdo($this->config);
+                $pdo->query('SELECT 1');
+                $schemaReady = Database::schemaReady($pdo);
+                $checks[] = ['name' => 'database', 'state' => 'healthy', 'detail' => 'Connection and SELECT 1 succeeded.'];
+                $checks[] = $schemaReady
+                    ? ['name' => 'schema', 'state' => 'healthy', 'detail' => 'Required schema is present.']
+                    : ['name' => 'schema', 'state' => 'unhealthy', 'detail' => 'Required schema is missing.'];
+                $healthy = $healthy && $schemaReady;
+            } catch (Throwable $throwable) {
+                $healthy = false;
+                $checks[] = ['name' => 'database', 'state' => 'unhealthy', 'detail' => $throwable->getMessage()];
+            }
+
+            $storageReady = $this->storageReady($storage) === 'ready';
+            $checks[] = [
+                'name' => 'storage_service',
+                'state' => $storageReady ? 'healthy' : 'unhealthy',
+                'detail' => $storageReady ? 'Storage service is reachable.' : 'Storage service is not reachable.',
+            ];
+            $healthy = $healthy && $storageReady;
+
+            return Response::json([
+                'component' => 'paint.elonn',
+                'component_version' => '3',
+                'deployment_id' => '',
+                'status' => $healthy ? 'running' : 'degraded',
+                'health' => [
+                    'state' => $healthy ? 'healthy' : 'unhealthy',
+                    'checks' => $checks,
+                ],
+                'configuration' => [
+                    'inspectable' => [
+                        'database.name' => (string) ($this->config['database']['name'] ?? ''),
+                        'storage_service.base_url' => (string) ($storage['base_url'] ?? ''),
+                        'storage_service.resource_url' => (string) ($storage['resource_url'] ?? ''),
+                        'storage_service.timeout_seconds' => (int) ($storage['timeout_seconds'] ?? 0),
+                    ],
+                    'mutable' => [],
+                ],
+                'maintenance' => ['state' => 'normal', 'reason' => ''],
+                'diagnostics' => ['available' => []],
+                'control' => [
+                    'restart' => ['state' => 'unavailable', 'reason' => 'Paint does not implement an administrative restart operation.'],
+                    'drain' => ['state' => 'unavailable', 'reason' => 'Paint does not implement an administrative drain operation.'],
+                ],
+                'observed_at' => gmdate('Y-m-d\TH:i:s\Z'),
+                'metadata' => (object) [],
+            ]);
+        });
+
         $this->router->get('/', fn (): Response => Response::json([
             'service' => 'elonn_paint',
             'description' => 'Elonn Paint document service.',
