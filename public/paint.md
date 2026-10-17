@@ -10,7 +10,7 @@ persistence, runtime presentation, World placement, or member authentication.
 
 - Service id: `paint.elonn`
 - Domain: `creative`
-- Revision: `4`
+- Revision: `5`
 - Published: `2026-10-17T00:00:00Z`
 - Canonical JSON: `https://paint.elonn.com/paint.json`
 - Service Publication: `https://paint.elonn.com/paint-publication.json`

@@ -77,6 +77,22 @@ $checks = [
         && ($labels['field.result_limit'] ?? null) === 'How many to show',
     'Contract and Publication declare the same revision' =>
         ($contract['contract']['revision'] ?? null) === ($publication['contract']['revision'] ?? null),
+    'paint.json declares all four canonical text fields, with type and meaning, for every Object/Collection structure it defines (Contract Authoring Guide, Canonical Text Fields)' =>
+        count((array) ($contract['structures']['service'] ?? [])) === 3
+        && array_reduce(
+            (array) ($contract['structures']['service'] ?? []),
+            static function (bool $carry, array $structure): bool {
+                $fields = (array) ($structure['canonical_text_fields'] ?? []);
+                foreach (['title', 'name', 'summary', 'description'] as $field) {
+                    if (($fields[$field]['type'] ?? '') !== 'string' || trim((string) ($fields[$field]['meaning'] ?? '')) === '') {
+                        return false;
+                    }
+                }
+
+                return $carry;
+            },
+            true
+        ),
 ];
 
 if ($issues !== []) {

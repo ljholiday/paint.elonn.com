@@ -6,7 +6,7 @@
     "purpose": "Owns Paint drawing document identity, records, operations, and lifecycle. Uses Storage for immutable Resource bytes; does not own Resource byte persistence, runtime presentation, World placement, or member authentication."
   },
   "contract": {
-    "revision": 4,
+    "revision": 5,
     "published": "2026-10-17T00:00:00Z"
   },
   "labels": {
@@ -118,9 +118,32 @@
       "Call",
       "Dataset"
     ],
-    "service": [
-      "Paint document object"
-    ]
+    "service": {
+      "paint.document object": {
+        "canonical_text_fields": {
+          "title": {"type": "string", "meaning": "The document's own real, user-given title."},
+          "name": {"type": "string", "meaning": "The identifying name. Always empty -- no distinct concept beyond title."},
+          "summary": {"type": "string", "meaning": "A real generated condensed account of the document's drawing content, once indexed (e.g. \"Paint drawing with 7 operations: My Sketch\"); empty before indexing. Never a fabricated placeholder."},
+          "description": {"type": "string", "meaning": "Descriptive information. Always empty -- no distinct concept beyond title/summary."}
+        }
+      },
+      "paint.workspace object": {
+        "canonical_text_fields": {
+          "title": {"type": "string", "meaning": "The literal heading \"Paint\"."},
+          "name": {"type": "string", "meaning": "The identifying name. Always empty -- no distinct concept beyond title."},
+          "summary": {"type": "string", "meaning": "A real fixed sentence describing what this is: \"Paint drawing workspace\"."},
+          "description": {"type": "string", "meaning": "A real fixed sentence describing what it invites: \"Create a new Paint drawing document.\""}
+        }
+      },
+      "paint.results Collection": {
+        "canonical_text_fields": {
+          "title": {"type": "string", "meaning": "A real heading, derived from the query or a fixed \"Recent Paint documents\"."},
+          "name": {"type": "string", "meaning": "The identifying name. Always empty -- one real concept, its heading."},
+          "summary": {"type": "string", "meaning": "A real computed result-count sentence, or the real no-match message."},
+          "description": {"type": "string", "meaning": "The same real sentence as summary, assigned directly and independently."}
+        }
+      }
+    }
   },
   "errors": [
     {
