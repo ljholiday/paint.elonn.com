@@ -268,6 +268,13 @@ $checks = [
         && str_starts_with((string) (preview_resource($dataset)['content']['data_url'] ?? ''), 'data:image/png;base64,')
         && str_starts_with((string) (graphics_resource($dataset)['content']['svg'] ?? ''), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">')
         && !str_contains((string) (graphics_resource($dataset)['content']['svg'] ?? ''), '<path'),
+    'paint.document declares all four canonical text fields independently at the top level -- name/description blank, no content-nested duplicates, summary never a fabricated placeholder' =>
+        ($dataset['objects'][0]['title'] ?? null) === 'Sketch'
+        && ($dataset['objects'][0]['name'] ?? null) === ''
+        && ($dataset['objects'][0]['summary'] ?? null) === ''
+        && ($dataset['objects'][0]['description'] ?? null) === ''
+        && !array_key_exists('name', $dataset['objects'][0]['content'] ?? [])
+        && !array_key_exists('description', $dataset['objects'][0]['content'] ?? []),
     'paint.create opens the document on Carry via a carry Placement, with a real open Action plus draw/rename Actions' => count($dataset['placements'] ?? []) === 1
         && ($dataset['placements'][0]['type'] ?? '') === 'carry'
         && count($dataset['actions'] ?? []) === 3
@@ -333,7 +340,7 @@ $checks = [
     'paint.rename updates document title without replacing Resources' => ($renameDataset['context']['operation'] ?? '') === 'paint.rename'
         && ($renameDataset['objects'][0]['id'] ?? '') === $createdDocumentId
         && ($renameDataset['objects'][0]['title'] ?? '') === 'Named Sketch'
-        && ($renameDataset['objects'][0]['content']['name'] ?? '') === 'Named Sketch'
+        && ($renameDataset['objects'][0]['name'] ?? null) === ''
         && ($renameDataset['objects'][0]['content']['source_resource'] ?? '') === $drawnSourceResource
         && ($renameDataset['objects'][0]['content']['preview_resource'] ?? '') === $drawnPreviewResource
         && ($renameDataset['objects'][0]['content']['graphics_resource'] ?? '') === $drawnGraphicsResource
@@ -341,6 +348,10 @@ $checks = [
         && count(source_document($renameDataset)['operations'] ?? []) === 1
         && str_starts_with((string) (preview_resource($renameDataset)['content']['data_url'] ?? ''), 'data:image/png;base64,')
         && substr_count((string) (graphics_resource($renameDataset)['content']['svg'] ?? ''), '<path') === 1,
+    'a drawn paint.document carries its real generated summary at the top level, description still blank' =>
+        is_string($renameDataset['objects'][0]['summary'] ?? null)
+        && str_contains((string) ($renameDataset['objects'][0]['summary'] ?? ''), 'Paint drawing with 1 operation')
+        && ($renameDataset['objects'][0]['description'] ?? null) === '',
     'paint.rename rejects invalid titles and missing documents' => $invalidRename instanceof InvalidArgumentException
         && $missingTitleRename instanceof InvalidArgumentException
         && $missingRename instanceof DocumentNotFoundException,
@@ -359,6 +370,17 @@ $checks = [
         && ($workspaceSearchDataset['actions'][0]['content']['operation_invocation']['operation'] ?? '') === 'paint.create'
         && ($workspaceSearchDataset['actions'][0]['target'] ?? '') === 'paint.workspace'
         && $store->find('paint.workspace') === null,
+    'paint.workspace and the search results Collection each declare all four canonical text fields independently at the top level, no content-nested duplicates' =>
+        ($workspaceSearchDataset['objects'][0]['title'] ?? null) === 'Paint'
+        && ($workspaceSearchDataset['objects'][0]['name'] ?? null) === ''
+        && ($workspaceSearchDataset['objects'][0]['summary'] ?? null) === 'Paint drawing workspace'
+        && ($workspaceSearchDataset['objects'][0]['description'] ?? null) === 'Create a new Paint drawing document.'
+        && !array_key_exists('name', $workspaceSearchDataset['objects'][0]['content'] ?? [])
+        && !array_key_exists('description', $workspaceSearchDataset['objects'][0]['content'] ?? [])
+        && ($workspaceSearchDataset['collections'][0]['name'] ?? null) === ''
+        && is_string($workspaceSearchDataset['collections'][0]['summary'] ?? null)
+        && ($workspaceSearchDataset['collections'][0]['summary'] ?? null) === ($workspaceSearchDataset['collections'][0]['description'] ?? null)
+        && !array_key_exists('description', $workspaceSearchDataset['collections'][0]['content'] ?? []),
     'paint.search returns matching saved Paint documents' => in_array($createdDocumentId, object_ids($savedDocumentSearchDataset), true)
         && count(array_values(array_filter($savedDocumentSearchDataset['objects'] ?? [], static fn (array $object): bool => ($object['type'] ?? '') === 'paint.workspace'))) === 0,
     'paint.search normalizes inflected document queries internally' => in_array($createdDocumentId, object_ids($inflectedDocumentSearchDataset), true)

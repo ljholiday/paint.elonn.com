@@ -390,11 +390,19 @@ final class PaintService
             'objects' => [[
                 'id' => $documentId,
                 'type' => 'paint.document',
+                // Canonical text fields (dev.elonn canonical/object.md, Canonical text
+                // fields): title is the document's own real title. summary is the real
+                // generated condensed account of its drawing content (indexDocument()'s
+                // summary, e.g. "Paint drawing with 7 operations: My Sketch") when
+                // indexing has run -- never a fabricated placeholder when it has not. name
+                // has no distinct identifying concept beyond title, and description no
+                // distinct concept beyond summary, so both stay empty rather than being
+                // filled by copying.
                 'title' => (string) $document['title'],
-                'summary' => 'Paint document',
+                'name' => '',
+                'summary' => (string) ($document['semantic_summary'] ?? ''),
+                'description' => '',
                 'content' => [
-                    'name' => (string) $document['title'],
-                    'description' => (string) ($document['semantic_summary'] ?? 'Paint document'),
                     'width' => (int) $document['width'],
                     'height' => (int) $document['height'],
                     'source_resource' => $document['source_resource_id'] ?? null,
@@ -535,10 +543,11 @@ final class PaintService
                 'id' => $collectionId,
                 'type' => 'paint.results',
                 'title' => $text !== '' ? 'Paint results for ' . $text : 'Recent Paint documents',
+                'name' => '',
                 'summary' => $summary,
+                'description' => $summary,
                 'items' => array_map(static fn (array $object): string => (string) $object['id'], $objects),
                 'content' => [
-                    'description' => $summary,
                     'query' => $text,
                     'count' => count($objects),
                 ],
@@ -579,10 +588,10 @@ final class PaintService
             'id' => 'paint.workspace',
             'type' => 'paint.workspace',
             'title' => 'Paint',
+            'name' => '',
             'summary' => 'Paint drawing workspace',
+            'description' => 'Create a new Paint drawing document.',
             'content' => [
-                'name' => 'Paint',
-                'description' => 'Create a new Paint drawing document.',
                 'service' => 'paint',
                 'kind' => 'drawing_workspace',
             ],

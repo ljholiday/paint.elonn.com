@@ -10,8 +10,8 @@ persistence, runtime presentation, World placement, or member authentication.
 
 - Service id: `paint.elonn`
 - Domain: `creative`
-- Revision: `3`
-- Published: `2026-09-22T00:00:00Z`
+- Revision: `4`
+- Published: `2026-10-17T00:00:00Z`
 - Canonical JSON: `https://paint.elonn.com/paint.json`
 - Service Publication: `https://paint.elonn.com/paint-publication.json`
 
@@ -134,6 +134,27 @@ Rename an existing Paint document already identified by a prior Dataset action's
 
 Paint returns one canonical Service `Dataset` containing Paint document objects, their Storage-backed
 source/preview Resources, and relevant workspace/collection placements.
+
+### Canonical text fields
+
+Every `paint.document`, `paint.workspace` Object, and `paint.results` Collection declares all four
+canonical text fields (dev.elonn canonical/object.md, Canonical text fields) independently and at the
+top level: `title`, `name`, `summary`, `description`.
+
+- `paint.document` stores a real title (the document's own, user-given) and, once indexed, a real
+  generated condensed account of its drawing content (`indexDocument()`'s summary, e.g. "Paint drawing
+  with 7 operations: My Sketch") — `title` carries the title, `summary` carries that condensed account
+  when indexing has produced one, and stays empty when it has not (never a fabricated placeholder).
+  There is no distinct identifying name or free-form descriptive text beyond those two, so `name` and
+  `description` stay empty rather than being filled by copying.
+- `paint.workspace` (the fixed "create a drawing" entry point) has one real heading ("Paint"), one
+  real descriptive sentence about what it is ("Paint drawing workspace"), and one real descriptive
+  sentence about what it invites ("Create a new Paint drawing document.") — `title` and `summary`
+  carry the first two, `description` carries the third. There is no distinct identifying name beyond
+  the title, so `name` stays empty.
+- `paint.results` has one real heading, query-derived — `title` carries it, `name` stays empty.
+  `summary` and `description` are each assigned the same one real computed sentence (a result count,
+  or the real no-match message) directly and independently, not derived from the other.
 
 ## Side Effects
 

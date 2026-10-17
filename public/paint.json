@@ -6,8 +6,8 @@
     "purpose": "Owns Paint drawing document identity, records, operations, and lifecycle. Uses Storage for immutable Resource bytes; does not own Resource byte persistence, runtime presentation, World placement, or member authentication."
   },
   "contract": {
-    "revision": 3,
-    "published": "2026-09-22T00:00:00Z"
+    "revision": 4,
+    "published": "2026-10-17T00:00:00Z"
   },
   "labels": {
     "field.search_text": "Search",
