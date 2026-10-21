@@ -495,9 +495,9 @@ final class PaintService
             'collections' => [],
             'resources' => $resourceObjects,
             // paint.read / create / draw / rename open a single document: it is placed on Carry
-            // (an opened Object -- see dev.elonn canonical/layout.md).
+            // (an opened Object -- see dev.elonn canonical/layout.md). No `id` here: World mints
+            // a Placement's id itself (placement.md, Placement identity).
             'placements' => [[
-                'id' => 'placement:' . $documentId . ':carry',
                 'type' => 'carry',
                 'content' => [
                     'object' => $documentId,
