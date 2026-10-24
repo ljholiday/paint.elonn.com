@@ -6,8 +6,8 @@
     "purpose": "Owns Paint drawing document identity, records, operations, and lifecycle. Uses Storage for immutable Resource bytes; does not own Resource byte persistence, runtime presentation, World placement, or member authentication."
   },
   "contract": {
-    "revision": 5,
-    "published": "2026-10-17T00:00:00Z"
+    "revision": 6,
+    "published": "2026-10-24T00:00:00Z"
   },
   "labels": {
     "field.search_text": "Search",
@@ -140,7 +140,7 @@
           "title": {"type": "string", "meaning": "A real heading, derived from the query or a fixed \"Recent Paint documents\"."},
           "name": {"type": "string", "meaning": "The identifying name. Always empty -- one real concept, its heading."},
           "summary": {"type": "string", "meaning": "A real computed result-count sentence, or the real no-match message."},
-          "description": {"type": "string", "meaning": "The same real sentence as summary, assigned directly and independently."}
+          "description": {"type": "string", "meaning": "Always empty -- no distinct concept beyond summary."}
         }
       }
     }

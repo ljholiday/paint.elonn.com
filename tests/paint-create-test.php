@@ -379,7 +379,7 @@ $checks = [
         && !array_key_exists('description', $workspaceSearchDataset['objects'][0]['content'] ?? [])
         && ($workspaceSearchDataset['collections'][0]['name'] ?? null) === ''
         && is_string($workspaceSearchDataset['collections'][0]['summary'] ?? null)
-        && ($workspaceSearchDataset['collections'][0]['summary'] ?? null) === ($workspaceSearchDataset['collections'][0]['description'] ?? null)
+        && ($workspaceSearchDataset['collections'][0]['description'] ?? null) === ''
         && !array_key_exists('description', $workspaceSearchDataset['collections'][0]['content'] ?? []),
     'paint.search returns matching saved Paint documents' => in_array($createdDocumentId, object_ids($savedDocumentSearchDataset), true)
         && count(array_values(array_filter($savedDocumentSearchDataset['objects'] ?? [], static fn (array $object): bool => ($object['type'] ?? '') === 'paint.workspace'))) === 0,

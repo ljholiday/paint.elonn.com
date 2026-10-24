@@ -153,8 +153,9 @@ top level: `title`, `name`, `summary`, `description`.
   carry the first two, `description` carries the third. There is no distinct identifying name beyond
   the title, so `name` stays empty.
 - `paint.results` has one real heading, query-derived — `title` carries it, `name` stays empty.
-  `summary` and `description` are each assigned the same one real computed sentence (a result count,
-  or the real no-match message) directly and independently, not derived from the other.
+  `summary` carries the one real computed sentence (a result count, or the real no-match
+  message); `description` has no distinct concept beyond it, so it stays empty rather than
+  being filled by copying.
 
 ## Side Effects
 

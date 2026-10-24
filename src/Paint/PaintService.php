@@ -545,7 +545,8 @@ final class PaintService
                 'title' => $text !== '' ? 'Paint results for ' . $text : 'Recent Paint documents',
                 'name' => '',
                 'summary' => $summary,
-                'description' => $summary,
+                // dev.elonn canonical/object.md, Canonical text fields: not an alias of summary.
+                'description' => '',
                 'items' => array_map(static fn (array $object): string => (string) $object['id'], $objects),
                 'content' => [
                     'query' => $text,
@@ -695,20 +696,23 @@ final class PaintService
     /** @param array<string, mixed> $resource @return array<string, mixed> */
     private function resourceObject(array $resource, string $kind, string $label): array
     {
+        // dev.elonn canonical/resource.md, Structure: "A Resource consists of: id, type,
+        // content." Stored-byte metadata (length/sha256/owner/created/modified) and
+        // url/replaces belong inside content, not as top-level siblings of it.
         return [
             'id' => (string) $resource['id'],
             'type' => (string) $resource['type'],
-            'length' => (int) $resource['length'],
-            'sha256' => (string) $resource['sha256'],
-            'owner' => (string) $resource['owner'],
-            'created' => (string) $resource['created'],
-            'modified' => (string) $resource['modified'],
-            'url' => $resource['url'] ?? null,
-            'replaces' => $resource['replaces'] ?? null,
-            'content' => [
+            'content' => array_filter([
                 'kind' => $kind,
                 'label' => $label,
-            ],
+                'length' => (int) $resource['length'],
+                'sha256' => (string) $resource['sha256'],
+                'owner' => (string) $resource['owner'],
+                'created' => (string) $resource['created'],
+                'modified' => (string) $resource['modified'],
+                'url' => $resource['url'] ?? null,
+                'replaces' => $resource['replaces'] ?? null,
+            ], static fn (mixed $value): bool => $value !== null),
         ];
     }
 
