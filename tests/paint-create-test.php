@@ -352,6 +352,12 @@ $checks = [
         is_string($renameDataset['objects'][0]['summary'] ?? null)
         && str_contains((string) ($renameDataset['objects'][0]['summary'] ?? ''), 'Paint drawing with 1 operation')
         && ($renameDataset['objects'][0]['description'] ?? null) === '',
+    // dev.elonn canonical/action.md, Initial values: paint.rename's own Action carries the
+    // document's real current title as its initial payload, never an empty object -- a
+    // Runtime initializes its rename form from exactly this.
+    'paint.rename Action carries the document\'s current title as initial payload' =>
+        ($renameDataset['actions'][2]['content']['operation_invocation']['operation'] ?? '') === 'paint.rename'
+        && ($renameDataset['actions'][2]['content']['operation_invocation']['payload']['title'] ?? null) === 'Named Sketch',
     'paint.rename rejects invalid titles and missing documents' => $invalidRename instanceof InvalidArgumentException
         && $missingTitleRename instanceof InvalidArgumentException
         && $missingRename instanceof DocumentNotFoundException,

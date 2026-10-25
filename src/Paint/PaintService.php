@@ -483,7 +483,13 @@ final class PaintService
                             'service' => 'paint',
                             'operation' => 'paint.rename',
                             'object_id' => $documentId,
-                            'payload' => [],
+                            // dev.elonn canonical/action.md, Initial values: paint.rename
+                            // fully replaces title on submit, so a Runtime initializing its
+                            // form must see the document's real current title here, never an
+                            // empty payload (which would force the member to retype it from
+                            // scratch, and submits nothing valid at all since title is
+                            // required and rejected empty).
+                            'payload' => ['title' => (string) ($document['title'] ?? '')],
                         ],
                         'availability' => [
                             'state' => 'enabled',
